@@ -58,15 +58,15 @@ Media Files for Animes are scraped from AllManga.to (i stole this mechanic from 
 On first launch you'll be prompted to enter your TMDB API key. ([Guide on how to get one](tmdb-tutorial.md))
 It's saved locally, you only need to do this once.
 
-### Linux, Manual (.deb / .AppImage)
+### Linux, Manual (.deb / .AppImage / .pacman)
 
 Download the latest `.deb` or `.AppImage` from the [Releases](https://github.com/truelockmc/streambert/releases/latest) page.
 ```bash
 # .deb
 sudo dpkg -i streambert_*.deb
 
-# Arch Linux (.pkg.tar.zst)
-sudo pacman -U streambert-*.pkg.tar.zst
+# Arch Linux (.pacman)
+sudo pacman -U streambert-*.pacman
 
 # .AppImage (you can also do it with Gearlever)
 chmod +x Streambert-x64.AppImage && ./Streambert-x64.AppImage
@@ -99,13 +99,12 @@ npm run dist:arch
 or (for an AppImage only)
 ```bash
 npm run dist:appimage
-# To run:
-chmod +x dist/Streambert-*.AppImage && ./dist/Streambert-*.AppImage
 ```
 
 > [!IMPORTANT]
-> If you are building on Arch Linux and encounter a `libcrypt.so.1` error, install the compatibility library:
-> `sudo pacman -S libxcrypt-compat`
+> If you are building/installing on Arch Linux and encounter errors, you may need these libraries:
+> - **libcrypt.so.1 error:** `sudo pacman -S libxcrypt-compat`
+> - **http-parser dependency error:** `yay -S http-parser` (from AUR)
 
 ---
 ## Project Structure
