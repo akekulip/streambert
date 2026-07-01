@@ -17,6 +17,7 @@ import { collectBackupData } from "./utils/backup";
 import { tmdbFetch, setApiErrorHandlers } from "./utils/api";
 import { clearAppCaches } from "./utils/storage";
 import { getMe } from "./utils/session";
+import * as userState from "./utils/userState";
 
 import Sidebar from "./components/Sidebar";
 import SearchModal from "./components/SearchModal";
@@ -350,6 +351,23 @@ export default function App() {
     getMe().then((m) => { if (!cancelled) setMe(m); });
     return () => { cancelled = true; };
   }, [authGate]);
+
+  // ── Per-user server state (web build): hydrate + keep in sync ─────────────
+  const applyServerState = useCallback((data) => {
+    setProgress(data.progress || {});
+    setWatched(data.watched || {});
+    setHistory(data.history || []);
+    setSaved(data.library || {});
+    setSavedOrder(data.libraryOrder || null);
+    // Synced settings may have changed what's already on screen:
+    setLibrarySort(storage.get(STORAGE_KEYS.LIBRARY_SORT) || "manual");
+    applyAccentColor(storage.get(STORAGE_KEYS.ACCENT_COLOR) || "red");
+  }, []);
+
+  useEffect(() => {
+    if (!window.__STREAMBERT_WEB__ || !me?.id) return;
+    userState.init(me, applyServerState);
+  }, [me, applyServerState]);
 
   // ── Detect platform for Windows titlebar ──────────────────────────────────
   useEffect(() => {
@@ -702,7 +720,7 @@ export default function App() {
         setSavedOrder((prev) => {
           const currentOrder = prev || Object.keys(currentSaved);
           const newOrder = currentOrder.filter((k) => k !== id);
-          storage.set("savedOrder", newOrder);
+          userState.saveLibraryOrder(newOrder);
           return newOrder;
         });
       } else {
@@ -718,12 +736,13 @@ export default function App() {
         setSavedOrder((prev) => {
           const currentOrder = prev || Object.keys(currentSaved);
           const newOrder = [...currentOrder, id];
-          storage.set("savedOrder", newOrder);
+          userState.saveLibraryOrder(newOrder);
           return newOrder;
         });
       }
       setSaved(next);
-      storage.set("saved", next);
+      if (isRemoving) userState.removeLibraryItem(next, id);
+      else userState.saveLibraryItem(next, id, next[id]);
     },
     [showToast, getMediaType],
   );
@@ -757,7 +776,7 @@ export default function App() {
         (h) => !(h.id === entry.id && h.media_type === entry.media_type),
       );
       const next = [entry, ...filtered].slice(0, 50);
-      storage.set("history", next);
+      userState.addHistoryEntry(next, entry);
       return next;
     });
   }, []); // no deps needed
@@ -769,7 +788,7 @@ export default function App() {
     setProgress((prev) => {
       if (prev[key] === pct) return prev; // no change - skip write
       const next = { ...prev, [key]: pct };
-      storage.set("progress", next);
+      userState.saveProgress(next, key, pct);
       return next;
     });
   }, []); // no deps needed
@@ -777,7 +796,7 @@ export default function App() {
   const markWatched = useCallback((key) => {
     setWatched((prev) => {
       const next = { ...prev, [key]: true };
-      storage.set("watched", next);
+      userState.setWatchedState(next, key, true);
       return next;
     });
   }, []);
@@ -786,7 +805,7 @@ export default function App() {
     setWatched((prev) => {
       const next = { ...prev };
       delete next[key];
-      storage.set("watched", next);
+      userState.setWatchedState(next, key, false);
       return next;
     });
   }, []);
@@ -851,7 +870,7 @@ export default function App() {
 
   const handleReorderSaved = useCallback((newOrder) => {
     setSavedOrder(newOrder);
-    storage.set("savedOrder", newOrder);
+    userState.saveLibraryOrder(newOrder);
   }, []);
 
   // Stable handler
