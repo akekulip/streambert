@@ -20,6 +20,7 @@ import {
   sourceSupportsProgress,
   sourceProgressViaFrames,
   sourceIsAsync,
+  getNextNonAsyncSource,
   fetchAnilistData,
   fetchEpisodeGroup,
   buildAnilistSeasons,
@@ -51,7 +52,13 @@ import BlockedStatsModal from "../components/BlockedStatsModal";
 import { WebEmbedPlayer, WebMediaPlayer } from "../components/WebPlayer";
 import { useAutoplay } from "../utils/useAutoplay";
 import { useBlockedStats } from "../utils/useBlockedStats";
-import { storage, STORAGE_KEYS } from "../utils/storage";
+import {
+  storage,
+  STORAGE_KEYS,
+  getFailoverSource,
+  setFailoverSource,
+  clearFailoverSource,
+} from "../utils/storage";
 import { fetchAniSkipTimings } from "../utils/aniSkip";
 import {
   fetchTVRating,
@@ -670,6 +677,27 @@ export default function TVPage({
   useEffect(() => {
     if (!playing || !selectedEp || !isAsync) return;
     if (resolvedPlayerUrl || resolvingUrl) return;
+    // Auto-failover: if AllManga previously lacked this episode, skip straight
+    // to the remembered alternate source.
+    const failKey = `tv_${item.id}_s${selectedSeason}e${selectedEp.episode_number}_${dubMode}`;
+    const cachedFailover = getFailoverSource(failKey);
+    if (cachedFailover) {
+      setResolveError(null);
+      setPlayerSource(cachedFailover);
+      return;
+    }
+    // On an AllManga miss, hand off to the next non-async source and remember it.
+    const doFailover = (msg) => {
+      const next = getNextNonAsyncSource(playerSource);
+      if (next && next !== playerSource) {
+        setFailoverSource(failKey, next);
+        setResolveError(null);
+        setResolvingUrl(false);
+        setPlayerSource(next);
+      } else {
+        setResolveError(msg || "Episode not found on AllManga");
+      }
+    };
     setResolvingUrl(true);
     setResolveError(null);
     const epNum = selectedEp.episode_number;
@@ -697,7 +725,7 @@ export default function TVPage({
             setResolvedPlayerUrl(res.url);
             setM3u8Url(res.url);
           } else {
-            setResolveError(res?.error || "Episode not found on AllManga");
+            doFailover(res?.error);
           }
           return;
         }
@@ -726,7 +754,7 @@ export default function TVPage({
         }
       })
       .catch((e) => {
-        if (mounted) setResolveError(e.message || "Error");
+        if (mounted) doFailover(e.message);
       })
       .finally(() => {
         if (mounted) setResolvingUrl(false);
@@ -2055,6 +2083,11 @@ export default function TVPage({
                         onClick={() => {
                           setShowSourceMenu(false);
                           if (src.id === playerSource) return;
+                          // Manual pick wins over auto-failover for this episode.
+                          if (selectedEp)
+                            clearFailoverSource(
+                              `tv_${item.id}_s${selectedSeason}e${selectedEp.episode_number}_${dubMode}`,
+                            );
                           setPlayerSource(src.id);
                           storage.set("playerSource", src.id);
                           setM3u8Url(null);

@@ -15,6 +15,7 @@ import {
   sourceSupportsProgress,
   sourceProgressViaFrames,
   sourceIsAsync,
+  getNextNonAsyncSource,
   fetchAnilistData,
   cleanAnilistDescription,
   isAnimeContent,
@@ -44,7 +45,12 @@ import BlockedStatsModal from "../components/BlockedStatsModal";
 import { useBlockedStats } from "../utils/useBlockedStats";
 import MediaCard from "../components/MediaCard";
 import { WebEmbedPlayer, WebMediaPlayer } from "../components/WebPlayer";
-import { storage } from "../utils/storage";
+import {
+  storage,
+  getFailoverSource,
+  setFailoverSource,
+  clearFailoverSource,
+} from "../utils/storage";
 import {
   fetchMovieRating,
   isRestricted,
@@ -298,6 +304,28 @@ export default function MoviePage({
   useEffect(() => {
     if (!playing || !sourceIsAsync(playerSource)) return;
     if (resolvedPlayerUrl || resolvingUrl) return;
+    // Auto-failover: if AllManga previously lacked this movie, skip straight to
+    // the remembered alternate source instead of re-trying and nagging.
+    const failKey = `movie_${item.id}_${dubMode}`;
+    const cachedFailover = getFailoverSource(failKey);
+    if (cachedFailover) {
+      setResolveError(null);
+      setPlayerSource(cachedFailover);
+      return;
+    }
+    // On an AllManga miss, hand off to the next non-async source (VidSrc/…)
+    // and remember it, so the movie "just plays" instead of erroring.
+    const doFailover = (msg) => {
+      const next = getNextNonAsyncSource(playerSource);
+      if (next && next !== playerSource) {
+        setFailoverSource(failKey, next);
+        setResolveError(null);
+        setResolvingUrl(false);
+        setPlayerSource(next);
+      } else {
+        setResolveError(msg || "Movie not found on AllManga");
+      }
+    };
     setResolvingUrl(true);
     setResolveError(null);
     const startTime = storage.get("dlTime_" + progressKey) || 0;
@@ -324,7 +352,7 @@ export default function MoviePage({
             setResolvedPlayerUrl(res.url);
             setM3u8Url(res.url);
           } else {
-            setResolveError(res?.error || "Movie not found on AllManga");
+            doFailover(res?.error);
           }
           return;
         }
@@ -352,7 +380,7 @@ export default function MoviePage({
         }
       })
       .catch((e) => {
-        if (mounted) setResolveError(e.message || "Error");
+        if (mounted) doFailover(e.message);
       })
       .finally(() => {
         if (mounted) setResolvingUrl(false);
@@ -1056,6 +1084,8 @@ export default function MoviePage({
                     onClick={() => {
                       setShowSourceMenu(false);
                       if (src.id === playerSource) return;
+                      // Manual pick wins over auto-failover for this title.
+                      clearFailoverSource(`movie_${item.id}_${dubMode}`);
                       setPlayerSource(src.id);
                       storage.set("playerSource", src.id);
                       setM3u8Url(null);
