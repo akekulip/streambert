@@ -5,8 +5,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
     PORT=8788
 WORKDIR /app
-COPY package.json ./
-RUN npm install --omit=dev
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
 COPY extract.js server.js ./
 COPY test ./test
 EXPOSE 8788

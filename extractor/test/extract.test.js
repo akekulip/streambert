@@ -32,3 +32,20 @@ test("handleExtract maps extractor errors to status codes", async () => {
   assert.equal((await handleExtract({ tmdb: "1", type: "movie" }, { extractStream: noStream })).status, 404);
   assert.equal((await handleExtract({ tmdb: "1", type: "movie" }, { extractStream: timeout })).status, 504);
 });
+
+test("withTimeout enforces a true end-to-end deadline without any network/browser", async () => {
+  // Proves the timeout wrapper itself (used to bound queue-wait + embed
+  // fetch + sniff as one deadline) rejects with TimeoutError promptly, and
+  // that its onTimeout hook (used to close the browser context early on a
+  // real timeout) fires — instead of waiting for the inner work to finish.
+  const { withTimeout, TimeoutError } = require("../extract");
+  const neverResolves = new Promise(() => {});
+  let cleanedUp = false;
+  const start = Date.now();
+  await assert.rejects(
+    () => withTimeout(50, neverResolves, () => { cleanedUp = true; }),
+    TimeoutError,
+  );
+  assert.ok(Date.now() - start < 1000, "timeout should fire well within its budget, not wait on the never-resolving promise");
+  assert.equal(cleanedUp, true, "onTimeout cleanup hook must run when the deadline fires");
+});

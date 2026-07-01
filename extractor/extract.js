@@ -9,6 +9,7 @@ const UA =
 const VIDSRC = "https://vidsrc.me";
 const MAX_CONCURRENCY = 2;
 const REQUEST_TIMEOUT_MS = 20000;
+const MAX_REDIRECTS = 5;
 
 class NoStreamError extends Error { constructor(m) { super(m); this.name = "NoStreamError"; } }
 class TimeoutError extends Error { constructor(m) { super(m); this.name = "TimeoutError"; } }
@@ -24,7 +25,7 @@ function parseRcpUrl(embedHtml) {
   return m ? "https:" + m[1] : null;
 }
 
-function httpGet(url, referer) {
+function httpGet(url, referer, redirectCount = 0) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
     const req = https.request(
@@ -32,7 +33,8 @@ function httpGet(url, referer) {
       (res) => {
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           res.resume();
-          return httpGet(res.headers.location.startsWith("http") ? res.headers.location : `https://${u.hostname}${res.headers.location}`, referer).then(resolve, reject);
+          if (redirectCount >= MAX_REDIRECTS) return reject(new Error("too many redirects"));
+          return httpGet(res.headers.location.startsWith("http") ? res.headers.location : `https://${u.hostname}${res.headers.location}`, referer, redirectCount + 1).then(resolve, reject);
         }
         let d = ""; res.on("data", (c) => (d += c)); res.on("end", () => resolve(d));
       },
@@ -63,24 +65,30 @@ async function withSlot(fn) {
   finally { active--; const next = queue.shift(); if (next) next(); }
 }
 
-function withTimeout(ms, promise) {
+function withTimeout(ms, promise, onTimeout) {
   let t;
-  const timeout = new Promise((_, rej) => { t = setTimeout(() => rej(new TimeoutError("extract timeout")), ms); });
+  const timeout = new Promise((_, rej) => {
+    t = setTimeout(() => {
+      if (onTimeout) { try { onTimeout(); } catch { /* ignore cleanup errors */ } }
+      rej(new TimeoutError("extract timeout"));
+    }, ms);
+  });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
 }
 
-async function sniff(rcpUrl) {
+async function sniff(rcpUrl, handle) {
   const browser = await getBrowser();
   const ctx = await browser.createBrowserContext();
+  if (handle) handle.ctx = ctx;
   const page = await ctx.newPage();
   try {
     await page.setUserAgent(UA);
     await page.setExtraHTTPHeaders({ Referer: `${VIDSRC}/` });
     const hits = [];
     page.on("request", (r) => { const u = r.url(); if (/\.m3u8/i.test(u) && !/__TOKEN__/.test(u)) hits.push(u); });
-    await page.goto(rcpUrl, { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => {});
-    for (let i = 0; i < 4 && hits.length === 0; i++) {
-      await new Promise((r) => setTimeout(r, 2500));
+    await page.goto(rcpUrl, { waitUntil: "domcontentloaded", timeout: 10000 }).catch(() => {});
+    for (let i = 0; i < 3 && hits.length === 0; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
       try { await page.mouse.click(640, 360); } catch { /* ignore */ }
       for (const f of page.frames()) { try { await f.click("body"); } catch { /* ignore */ } }
     }
@@ -89,11 +97,24 @@ async function sniff(rcpUrl) {
   } finally { await ctx.close().catch(() => {}); }
 }
 
+// The 20s deadline covers the whole request: queue wait (withSlot) + embed
+// fetch + rcp parse + sniff. withTimeout wraps withSlot (not the reverse) so
+// a timed-out request keeps holding its concurrency slot until the real work
+// actually tears down (withSlot's `finally` only runs when its inner fn
+// settles) — on timeout we also proactively close the browser context so
+// Chromium teardown isn't left to sniff's own (now shorter) internal budget.
 async function extractStream({ tmdb, type, season, episode }) {
-  const embedHtml = await httpGet(buildEmbedUrl({ tmdb, type, season, episode }), `${VIDSRC}/`);
-  const rcpUrl = parseRcpUrl(embedHtml);
-  if (!rcpUrl) throw new NoStreamError("no rcp iframe in embed");
-  return withSlot(() => withTimeout(REQUEST_TIMEOUT_MS, sniff(rcpUrl)));
+  const handle = { ctx: null };
+  return withTimeout(
+    REQUEST_TIMEOUT_MS,
+    withSlot(async () => {
+      const embedHtml = await httpGet(buildEmbedUrl({ tmdb, type, season, episode }), `${VIDSRC}/`);
+      const rcpUrl = parseRcpUrl(embedHtml);
+      if (!rcpUrl) throw new NoStreamError("no rcp iframe in embed");
+      return sniff(rcpUrl, handle);
+    }),
+    () => { if (handle.ctx) handle.ctx.close().catch(() => {}); },
+  );
 }
 
-module.exports = { buildEmbedUrl, parseRcpUrl, extractStream, NoStreamError, TimeoutError };
+module.exports = { buildEmbedUrl, parseRcpUrl, extractStream, withTimeout, NoStreamError, TimeoutError };
