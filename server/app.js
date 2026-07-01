@@ -62,6 +62,7 @@ async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir }) {
   await tryRegister("./routes/subtitles", { prefix: "/api/subtitles" });
   await tryRegister("./routes/wyzie", { prefix: "/api/wyzie" });
   await tryRegister("./routes/proxy", { prefix: "/api/proxy" });
+  await tryRegister("./routes/extract", { prefix: "/api/extract" });
 
   if (distDir && fs.existsSync(distDir)) {
     await fastify.register(require("@fastify/static"), {
