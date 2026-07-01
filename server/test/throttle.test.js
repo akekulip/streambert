@@ -21,3 +21,14 @@ test("lockout expires after lockoutMs", () => {
   // lockoutMs negative => lockedUntil already in the past
   assert.equal(t.isLocked("k"), false);
 });
+
+test("failure count resets after the window elapses", async () => {
+  const t = createLoginThrottle({ max: 2, windowMs: 20, lockoutMs: 1000 });
+  const k = "u|ip";
+  t.registerFailure(k); // count = 1 within the window
+  await new Promise((r) => setTimeout(r, 30)); // let the 20ms window elapse
+  t.registerFailure(k); // window aged out -> count resets to 1, so not locked yet
+  assert.equal(t.isLocked(k), false);
+  t.registerFailure(k); // count reaches 2 -> now locked
+  assert.equal(t.isLocked(k), true);
+});
