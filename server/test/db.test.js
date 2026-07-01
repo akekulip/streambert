@@ -12,8 +12,22 @@ test("openDb creates the users table", () => {
   db.close();
 });
 
-test("openDb is idempotent (safe to call twice on same file)", () => {
-  const db = openDb(":memory:");
-  assert.doesNotThrow(() => db.exec("SELECT 1"));
-  db.close();
+test("openDb reopening the same file is idempotent and preserves data", () => {
+  const os = require("node:os");
+  const path = require("node:path");
+  const fs = require("node:fs");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sb-db-"));
+  const file = path.join(dir, "test.db");
+  const db1 = openDb(file);
+  db1
+    .prepare("INSERT INTO users (username, pw_hash, pw_salt, role, created_at) VALUES (?,?,?,?,?)")
+    .run("alice", "h", "s", "user", Date.now());
+  db1.close();
+  // Re-open the SAME file: migrate() must be idempotent (CREATE TABLE IF NOT
+  // EXISTS) and the previously-inserted row must survive.
+  const db2 = openDb(file);
+  const row = db2.prepare("SELECT username FROM users WHERE username = 'alice'").get();
+  assert.equal(row && row.username, "alice");
+  db2.close();
+  fs.rmSync(dir, { recursive: true, force: true });
 });
