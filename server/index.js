@@ -5,6 +5,33 @@
 const path = require("path");
 const fastify = require("fastify")({ logger: true });
 
+// Load a repo-root .env (KEY=VALUE per line) into process.env for local /
+// `node server/index.js` runs. Under Docker, Compose injects these vars directly
+// and no .env is copied into the image (see .dockerignore) — the loader simply
+// no-ops. Existing process.env values always win over the file.
+function loadDotEnv() {
+  const fs = require("fs");
+  let raw;
+  try {
+    raw = fs.readFileSync(path.join(__dirname, "..", ".env"), "utf8");
+  } catch {
+    return; // no .env present — nothing to load
+  }
+  for (const line of raw.split("\n")) {
+    const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (!m) continue; // blanks, comments (#...) don't match
+    let val = m[2].trim();
+    if (
+      (val.startsWith('"') && val.endsWith('"')) ||
+      (val.startsWith("'") && val.endsWith("'"))
+    )
+      val = val.slice(1, -1);
+    if (process.env[m[1]] === undefined) process.env[m[1]] = val;
+  }
+}
+
+loadDotEnv();
+
 const PASSWORD = process.env.STREAMBERT_PASSWORD || "";
 const COOKIE_SECRET =
   process.env.STREAMBERT_COOKIE_SECRET || "streambert-dev-secret-change-me";

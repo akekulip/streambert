@@ -23,9 +23,18 @@ module.exports = async function (fastify) {
     fs.writeFileSync(file, JSON.stringify(obj));
   };
 
-  fastify.get("/:key", async (req) => ({
-    value: load()[req.params.key] ?? null,
-  }));
+  // Env-provided defaults for sensitive keys. Lets a self-hoster pre-seed a
+  // value via .env (e.g. the TMDB Read Access Token) so the in-app setup screen
+  // never appears. A value saved through the UI is written to secure.json and
+  // takes precedence over the env default.
+  const envFallback = {
+    apikey: process.env.STREAMBERT_TMDB_TOKEN || process.env.TMDB_TOKEN || null,
+  };
+
+  fastify.get("/:key", async (req) => {
+    const key = req.params.key;
+    return { value: load()[key] ?? envFallback[key] ?? null };
+  });
 
   fastify.put("/:key", async (req) => {
     const obj = load();

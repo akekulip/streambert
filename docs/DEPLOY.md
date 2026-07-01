@@ -61,11 +61,17 @@ STREAMBERT_COOKIE_SECRET=paste-output-of-openssl-rand-hex-32
 DOMAIN=streambert.example.com
 
 # --- Optional ---------------------------------------------------------------
+# TMDB Read Access Token (the long "eyJ..." JWT). Set it to skip the in-app
+# setup screen so you never re-enter it on start. See tmdb-tutorial.md.
+STREAMBERT_TMDB_TOKEN=eyJ...
 # ACME email for Let's Encrypt expiry notices (public-domain mode only):
 TLS_EMAIL=you@example.com
 # Override only if you mount the downloader binary somewhere non-default:
 # STREAMBERT_DOWNLOADER=/usr/local/bin/vid-dl
 ```
+
+> A `.env.example` at the repo root has these same keys — `cp .env.example .env`
+> to start from it.
 
 Generate a strong cookie secret:
 
@@ -80,6 +86,7 @@ openssl rand -hex 32
 | `STREAMBERT_PASSWORD`      | ✅       | —                        | Login password for the single-user web app. |
 | `STREAMBERT_COOKIE_SECRET` | ✅       | (dev fallback; change it)| Secret that signs the session cookie. |
 | `DOMAIN`                   | ✅       | —                        | Caddy site address (public domain, or LAN host/IP for `tls internal`). |
+| `STREAMBERT_TMDB_TOKEN`    | ➖       | (none)                   | TMDB Read Access Token. Set it to pre-seed the key and skip the in-app setup screen; a token saved in the app overrides it. |
 | `TLS_EMAIL`                | ➖       | (none)                   | ACME email for Let's Encrypt notices. |
 | `STREAMBERT_DOWNLOADER`    | ➖       | `/usr/local/bin/vid-dl`  | Path to the downloader CLI inside the container. |
 | `STREAMBERT_DATA`          | (set)    | `/data`                  | Set to `/data` by compose; persisted via `./data`. |

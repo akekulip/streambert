@@ -22,6 +22,10 @@ services:
       # Persisted data (downloads + secure key store) lives here inside the container.
       STREAMBERT_DATA: /data
       PORT: "8787"
+      # Optional: pre-seed the TMDB Read Access Token so the in-app setup screen
+      # never appears. Leave blank to enter it in the app instead; a token saved
+      # in the app takes precedence. Get one via tmdb-tutorial.md.
+      STREAMBERT_TMDB_TOKEN: ${STREAMBERT_TMDB_TOKEN:-}
       # Path to the downloader CLI inside the container. Defaults to the image
       # value; override only if you mount the binary somewhere else.
       STREAMBERT_DOWNLOADER: ${STREAMBERT_DOWNLOADER:-/usr/local/bin/vid-dl}

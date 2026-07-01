@@ -6,4 +6,5 @@ dist/
 *secret.txt
 .env
 .env.*
+!.env.example
 data/
