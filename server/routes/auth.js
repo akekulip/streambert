@@ -48,6 +48,6 @@ module.exports = async function (fastify) {
 
   fastify.get("/api/me", async (req, reply) => {
     if (!req.user) return reply.code(401).send({ error: "unauthorized" });
-    return { username: req.user.username, role: req.user.role };
+    return { id: req.user.id, username: req.user.username, role: req.user.role };
   });
 };

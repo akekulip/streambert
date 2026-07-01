@@ -56,6 +56,7 @@ async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir }) {
     await fastify.register(plugin, opts);
   };
   await tryRegister("./routes/secure", { prefix: "/api/secure" });
+  await tryRegister("./routes/state", { prefix: "/api/state" });
   await tryRegister("./routes/meta", { prefix: "/api" });
   await tryRegister("./routes/allmanga", { prefix: "/api/allmanga" });
   await tryRegister("./routes/downloads", { prefix: "/api/downloads" });
