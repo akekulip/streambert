@@ -21,6 +21,14 @@ async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir }) {
   const fastify = require("fastify")({ logger: true, trustProxy: true });
   await fastify.register(require("@fastify/cookie"), { secret: cookieSecret });
   await fastify.register(require("@fastify/websocket"));
+  // Brotli/gzip compression for text responses (HTML/CSS/JS/JSON). Binary/media
+  // content-types (video, images) aren't compressible and are skipped, so the
+  // /api/proxy media stream and downloads are unaffected.
+  await fastify.register(require("@fastify/compress"), {
+    global: true,
+    encodings: ["br", "gzip"],
+    threshold: 1024,
+  });
 
   fastify.decorate("db", db);
   fastify.decorate("loginThrottle", loginThrottle);
@@ -56,7 +64,17 @@ async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir }) {
   await tryRegister("./routes/proxy", { prefix: "/api/proxy" });
 
   if (distDir && fs.existsSync(distDir)) {
-    await fastify.register(require("@fastify/static"), { root: distDir, prefix: "/" });
+    await fastify.register(require("@fastify/static"), {
+      root: distDir,
+      prefix: "/",
+      // Content-hashed files under /assets/ can be cached forever; everything
+      // else (index.html) keeps the default max-age=0 so new builds are picked up.
+      setHeaders: (res, filePath) => {
+        if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        }
+      },
+    });
   }
   fastify.setNotFoundHandler((req, reply) => {
     if (req.raw.url.startsWith("/api/")) return reply.code(404).send({ error: "not found" });

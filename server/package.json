@@ -9,6 +9,7 @@
     "test": "node --test test/"
   },
   "dependencies": {
+    "@fastify/compress": "^7.0.3",
     "@fastify/cookie": "^9.4.0",
     "@fastify/static": "^7.0.4",
     "@fastify/websocket": "^10.0.1",
