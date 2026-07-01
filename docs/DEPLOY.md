@@ -26,6 +26,44 @@ downloader CLI (`vid-dl`) — see [Downloader binary](#downloader-binary-optiona
 
 ---
 
+## Extractor sidecar (VidSrc Direct — optional)
+
+The **"VidSrc Direct"** source plays movies/TV as a clean, ad-free HLS stream by
+extracting the real stream server-side (headless Chrome) instead of loading
+VidSrc's ad-laden embed in an iframe. It requires a third container:
+
+| Service                | Image                          | Role                                                        |
+|------------------------|--------------------------------|-------------------------------------------------------------|
+| `streambert-extractor` | built from `extractor/Dockerfile` | Node + puppeteer-core + Chromium; loads the VidSrc player, mints the token, and sniffs the real `.m3u8`. **Internal only** — never published to the host. |
+
+Build and run it on the same Docker network as the app, then point the app at it
+via `STREAMBERT_EXTRACTOR_URL`:
+
+```bash
+# build (installs Chromium — a few minutes)
+cd extractor && docker build -t streambert-extractor:latest .
+
+# run on the shared network, internal-only, memory-capped + log-rotated
+docker run -d --name streambert-extractor --restart unless-stopped \
+  --network <your-net> --memory=1500m \
+  --log-opt max-size=10m --log-opt max-file=3 \
+  streambert-extractor:latest
+
+# the app container needs this env so it can reach the sidecar:
+#   STREAMBERT_EXTRACTOR_URL=http://streambert-extractor:8788
+```
+
+The stream token is bound to the extracting host's IP subnet, so the app proxies
+every segment through `/api/proxy` (server-side) — the browser never fetches the
+CDN directly. Results are cached ~3h. Without this container the "VidSrc Direct"
+source simply fails over to another source; the rest of the app is unaffected.
+
+**Upkeep:** VidSrc rotates its player host and changes obfuscation regularly;
+when extraction breaks, rebuild the `streambert-extractor` image (the fix is
+contained to `extractor/`).
+
+---
+
 ## Prerequisites (on Vision)
 
 - Docker Engine + the Compose plugin:
