@@ -23,7 +23,7 @@ test("extract requires auth", async () => {
   assert.equal(r.statusCode, 401);
 });
 
-test("extract calls the sidecar once, then serves from cache", async () => {
+test("extract calls the sidecar once, then serves from cache", async (t) => {
   let calls = 0;
   const mock = http.createServer((req, res) => {
     calls++;
@@ -31,6 +31,7 @@ test("extract calls the sidecar once, then serves from cache", async () => {
     res.end(JSON.stringify({ m3u8: "https://cdn/master.m3u8?token=x", referer: "https://cdn/" }));
   });
   await new Promise((r) => mock.listen(0, r));
+  t.after(() => mock.close());
   process.env.STREAMBERT_EXTRACTOR_URL = `http://127.0.0.1:${mock.address().port}`;
 
   const { app, cookie } = await makeApp();
@@ -46,5 +47,4 @@ test("extract calls the sidecar once, then serves from cache", async () => {
 
   const bad = await app.inject({ method: "POST", url: "/api/extract/vidsrc", cookies: { sb_session: cookie }, payload: { type: "movie" } });
   assert.equal(bad.statusCode, 400);
-  mock.close();
 });
