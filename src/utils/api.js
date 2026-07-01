@@ -97,9 +97,9 @@ export const PLAYER_SOURCES = [
     tag: null,
     note: null,
     supportsProgress: true,
-    movieUrl: (id) => `https://player.videasy.net/movie/${id}`,
+    movieUrl: (id) => `https://player.videasy.to/movie/${id}`,
     tvUrl: (id, season, ep) =>
-      `https://player.videasy.net/tv/${id}/${season}/${ep}`,
+      `https://player.videasy.to/tv/${id}/${season}/${ep}`,
   },
   {
     id: "vidsrc",
@@ -108,9 +108,9 @@ export const PLAYER_SOURCES = [
     note: null,
     supportsProgress: true,
     progressViaFrames: true, // video is in a nested iframe, needs main-process frame query
-    movieUrl: (id) => `https://vidsrc.to/embed/movie/${id}`,
+    movieUrl: (id) => `https://vidsrc.me/embed/movie/${id}`,
     tvUrl: (id, season, ep) =>
-      `https://vidsrc.to/embed/tv/${id}/${season}/${ep}`,
+      `https://vidsrc.me/embed/tv/${id}/${season}/${ep}`,
   },
   {
     id: "2embed",
