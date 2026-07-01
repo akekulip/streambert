@@ -28,6 +28,15 @@ test("login rejects bad credentials and accepts good ones", async () => {
   await app.close();
 });
 
+test("login for a non-existent username is rejected the same as a bad password", async () => {
+  const { app } = await makeApp();
+  const res = await app.inject({ method: "POST", url: "/api/login", payload: { username: "ghost", password: "whatever" } });
+  assert.equal(res.statusCode, 401);
+  assert.equal(res.json().error, "invalid username or password");
+  assert.equal(res.cookies.find((c) => c.name === "sb_session"), undefined);
+  await app.close();
+});
+
 test("/api/me is 401 without a session and returns the user with one", async () => {
   const { app } = await makeApp();
   const anon = await app.inject({ method: "GET", url: "/api/me" });

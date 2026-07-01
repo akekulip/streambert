@@ -1,5 +1,13 @@
 "use strict";
 const { getUserByUsername, verifyPassword } = require("../lib/users");
+const { hashPassword } = require("../lib/passwords");
+
+// A fixed dummy credential so that an unknown username still incurs the full
+// scrypt cost. Without it, a miss returns near-instantly while a real user with
+// a wrong password pays for scrypt — a timing side-channel that leaks which
+// usernames exist. Verifying against DUMMY on the miss path keeps login
+// constant-time regardless of whether the username exists.
+const DUMMY = hashPassword("streambert-constant-time-dummy");
 
 module.exports = async function (fastify) {
   fastify.post("/api/login", async (req, reply) => {
@@ -9,7 +17,15 @@ module.exports = async function (fastify) {
       return reply.code(429).send({ error: "too many attempts, try again later" });
     }
     const user = username ? getUserByUsername(fastify.db, username) : null;
-    const ok = user && verifyPassword(password || "", user.pw_hash, user.pw_salt);
+    // Always call verifyPassword (against DUMMY when the user is unknown) so the
+    // work is identical whether or not the username exists — do NOT let `&&`
+    // short-circuit past the scrypt call.
+    const hashOk = verifyPassword(
+      password || "",
+      user ? user.pw_hash : DUMMY.hash,
+      user ? user.pw_salt : DUMMY.salt,
+    );
+    const ok = !!user && hashOk;
     if (!ok) {
       fastify.loginThrottle.registerFailure(key);
       return reply.code(401).send({ error: "invalid username or password" });
