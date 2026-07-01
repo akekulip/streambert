@@ -48,6 +48,11 @@ export const STORAGE_KEYS = {
   AGE_LIMIT: "ageLimit",
   RATING_COUNTRY: "ratingCountry",
   WATCHED_THRESHOLD: "watchedThreshold",
+  // Autoplay next episode (TV) — enabled default true, duration default 5s
+  // (0 = manual overlay only), layout "left" | "right".
+  AUTOPLAY_NEXT_ENABLED: "autoplayNextEnabled",
+  AUTOPLAY_NEXT_DURATION: "autoplayNextDuration",
+  AUTOPLAY_NEXT_LAYOUT: "autoplayNextLayout",
   HOME_ROW_ORDER: "homeRowOrder",
   HOME_ROW_VISIBLE: "homeRowVisible",
   HOME_VIEW_MODE: "homeViewMode",
