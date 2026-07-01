@@ -1,6 +1,6 @@
 # Streambert Web Port — Handoff
 
-_Last updated: 2026-07-01. Branch: `web-port` (local only — not pushed to any remote)._
+_Last updated: 2026-07-01 (late — post Phase 2 deploy). Branch: `web-port` (local only — not pushed to any remote)._
 
 This is the self-hostable **web port** of the Streambert Electron app. It runs as a
 Fastify server + built React frontend, deployed on the **Vision** server.
@@ -119,4 +119,7 @@ Plays movies/TV as a clean ad-free HLS stream extracted server-side instead of l
 ## 6. Outstanding
 
 - `web-port` is **local only** — not pushed. Push / open a PR when ready.
-- SDD progress ledger + task briefs for the VidSrc Direct build live in `.superpowers/sdd/` (git-ignored scratch).
+- SDD progress ledger + task briefs (VidSrc Direct + Phase 2 builds) live in `.superpowers/sdd/` (git-ignored scratch).
+- **Phase 2 deployed 2026-07-01 ~23:54** (image `cc211886a382`; rollback container `streambert_prev` kept on Vision). Live-verified server-side: all 5 tables migrated, throwaway-user e2e passed (login / me-with-id / all state writes incl. text/plain beacon / bootstrap round-trip / cascade delete). Post-deploy backup taken + verified (`backups/streambert-2026-07-01-23-56-25.db`).
+- **Human check still pending:** two browsers as the same user — library add / progress update should live-sync (WS `state-changed`); also a real-browser migration pass (seed localStorage, log in fresh).
+- **Improvement roadmap (session decisions, 2026-07-01):** scale target ~10–100 users (single process + SQLite stays). Queue after Phase 2: ① TMDB server-side cache + perf hardening → ② recommendation engine v2 (now unblocked by server-side history) → ③ analytics + admin dashboard → Phase 3 (per-user downloads). Off-box backup copy is a nice-to-have.
