@@ -27,6 +27,8 @@ let _applying = false;
 let _apply = null;
 let _lastWriteAt = 0;
 let _refetchTimer = null;
+let _reconcilePromise = null;
+let _listenersInstalled = false;
 
 const _pendingProgress = new Map(); // key -> pct
 let _progressTimer = null;
@@ -115,7 +117,7 @@ function applyResult(data) {
 // Bootstrap / migrate / reconcile. Safe to call repeatedly (focus, online,
 // state-changed). Leaves _enabled false when the server is unreachable so
 // writes stay local-only until the next attempt.
-async function reconcile(userId) {
+async function doReconcile() {
   try {
     const dirty = storage.get(DIRTY_KEY);
     if (_enabled && dirty) {
@@ -125,7 +127,7 @@ async function reconcile(userId) {
       return;
     }
     let boot = await (await api("GET", "/bootstrap")).json();
-    const migratedFlag = `streambert_migrated_${userId}`;
+    const migratedFlag = `streambert_migrated_${_initedFor}`;
     const local = collectLocalState();
     if (serverIsEmpty(boot) && hasLocalContent(local) && !localStorage.getItem(migratedFlag)) {
       boot = await (await api("POST", "/import", local)).json();
@@ -139,6 +141,17 @@ async function reconcile(userId) {
   } catch {
     /* offline / unauthenticated: stay on the localStorage cache */
   }
+}
+
+// Single-flight: focus, online, and state-changed can all fire at once —
+// overlapping reconciles whose responses resolve out of order would let an
+// older snapshot overwrite a newer one, so concurrent callers share one run.
+function reconcile() {
+  if (_reconcilePromise) return _reconcilePromise;
+  _reconcilePromise = doReconcile().finally(() => {
+    _reconcilePromise = null;
+  });
+  return _reconcilePromise;
 }
 
 function onStorageSet(key, value) {
@@ -156,7 +169,7 @@ function onRemoteChange() {
   // Skip refetches triggered by our own just-sent writes.
   if (Date.now() - _lastWriteAt < REFETCH_GUARD_MS) return;
   clearTimeout(_refetchTimer);
-  _refetchTimer = setTimeout(() => reconcile(_initedFor), REFETCH_DEBOUNCE_MS);
+  _refetchTimer = setTimeout(() => reconcile(), REFETCH_DEBOUNCE_MS);
 }
 
 function sendPendingProgress() {
@@ -168,6 +181,10 @@ function sendPendingProgress() {
 }
 
 export function flushProgress() {
+  if (_progressTimer) {
+    clearTimeout(_progressTimer);
+    _progressTimer = null;
+  }
   if (!_enabled || _pendingProgress.size === 0) return;
   for (const [key, pct] of _pendingProgress) {
     try {
@@ -180,9 +197,12 @@ export function flushProgress() {
 export async function init(me, applyServerState) {
   _apply = applyServerState;
   if (_initedFor === me.id) {
-    reconcile(me.id);
+    reconcile();
     return;
   }
+  // First init or a different user: block stale-enabled writes from firing
+  // between the clear below and the fresh hydrate.
+  _enabled = false;
   // Shared-browser safety: a different user logged in — drop the previous
   // user's cached state BEFORE hydrating so it is never shown or imported.
   const last = localStorage.getItem("streambert_lastUserId");
@@ -190,16 +210,21 @@ export async function init(me, applyServerState) {
   localStorage.setItem("streambert_lastUserId", String(me.id));
   _initedFor = me.id;
 
-  registerStorageSetListener(onStorageSet);
-  window.addEventListener("focus", () => reconcile(me.id));
-  window.addEventListener("online", () => reconcile(me.id));
-  window.addEventListener("pagehide", flushProgress);
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") flushProgress();
-  });
-  if (window.electron?.onStateChanged) window.electron.onStateChanged(onRemoteChange);
+  // Register listeners once per module lifetime — they read the current user
+  // from module state, so re-running init() must not stack duplicate handlers.
+  if (!_listenersInstalled) {
+    registerStorageSetListener(onStorageSet);
+    window.addEventListener("focus", () => reconcile());
+    window.addEventListener("online", () => reconcile());
+    window.addEventListener("pagehide", flushProgress);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") flushProgress();
+    });
+    if (window.electron?.onStateChanged) window.electron.onStateChanged(onRemoteChange);
+    _listenersInstalled = true;
+  }
 
-  await reconcile(me.id);
+  await reconcile();
 }
 
 export function saveProgress(nextObj, key, pct) {
