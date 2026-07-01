@@ -621,6 +621,21 @@ export default function MoviePage({
     };
   }, [playing, playerSource]);
 
+  // Web fullscreen: fullscreen the player wrapper (which holds the embed iframe
+  // or the <video>). On the web build the Electron webview-fullscreen path above
+  // is a no-op, so this button is the only way to go fullscreen. (iOS Safari
+  // only fullscreens <video>, not iframes — a platform limit for embed sources.)
+  const toggleFullscreen = () => {
+    const el = playerWrapRef.current;
+    if (!el) return;
+    const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+    if (fsEl) {
+      (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+    } else {
+      (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el);
+    }
+  };
+
   // ── PiP pop-out: navigate main webview away so only one stream is active ──
   useEffect(() => {
     if (!playing) return;
@@ -1046,6 +1061,25 @@ export default function MoviePage({
                 {blockedSession > 0 && (
                   <span className="player-blocked-badge">{blockedSession}</span>
                 )}
+              </button>
+              {/* Fullscreen button */}
+              <button
+                className="player-overlay-btn"
+                onClick={toggleFullscreen}
+                title="Fullscreen"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m10 0h3a2 2 0 0 0 2-2v-3" />
+                </svg>
               </button>
               {/* Pop-out button*/}
               <button
