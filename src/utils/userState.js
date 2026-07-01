@@ -29,6 +29,7 @@ let _lastWriteAt = 0;
 let _refetchTimer = null;
 let _reconcilePromise = null;
 let _listenersInstalled = false;
+let _epoch = 0; // bumped on user switch; invalidates in-flight async work
 
 const _pendingProgress = new Map(); // key -> pct
 let _progressTimer = null;
@@ -118,22 +119,29 @@ function applyResult(data) {
 // state-changed). Leaves _enabled false when the server is unreachable so
 // writes stay local-only until the next attempt.
 async function doReconcile() {
+  // Epoch guard: a user switch mid-flight (init() bumps _epoch) must abandon
+  // this run before it applies the previous user's data or re-enables writes.
+  const epoch = _epoch;
   try {
     const dirty = storage.get(DIRTY_KEY);
     if (_enabled && dirty) {
       const merged = await (await api("POST", "/import", collectLocalState())).json();
+      if (epoch !== _epoch) return;
       storage.remove(DIRTY_KEY);
       applyResult(merged);
       return;
     }
     let boot = await (await api("GET", "/bootstrap")).json();
+    if (epoch !== _epoch) return;
     const migratedFlag = `streambert_migrated_${_initedFor}`;
     const local = collectLocalState();
     if (serverIsEmpty(boot) && hasLocalContent(local) && !localStorage.getItem(migratedFlag)) {
       boot = await (await api("POST", "/import", local)).json();
+      if (epoch !== _epoch) return;
       localStorage.setItem(migratedFlag, "1");
     } else if (storage.get(DIRTY_KEY)) {
       boot = await (await api("POST", "/import", local)).json();
+      if (epoch !== _epoch) return;
     }
     storage.remove(DIRTY_KEY);
     _enabled = true;
@@ -148,10 +156,13 @@ async function doReconcile() {
 // older snapshot overwrite a newer one, so concurrent callers share one run.
 function reconcile() {
   if (_reconcilePromise) return _reconcilePromise;
-  _reconcilePromise = doReconcile().finally(() => {
-    _reconcilePromise = null;
+  const p = doReconcile().finally(() => {
+    // Only clear our own reference — a stale run finishing after a user
+    // switch must not null out the newer run's promise.
+    if (_reconcilePromise === p) _reconcilePromise = null;
   });
-  return _reconcilePromise;
+  _reconcilePromise = p;
+  return p;
 }
 
 function onStorageSet(key, value) {
@@ -200,8 +211,18 @@ export async function init(me, applyServerState) {
     reconcile();
     return;
   }
-  // First init or a different user: block stale-enabled writes from firing
-  // between the clear below and the fresh hydrate.
+  // First init or a different user: quiesce ALL of the previous user's async
+  // work — invalidate in-flight reconciles (epoch), drop queued writes and
+  // timers — so nothing of theirs can land in the new user's state or account.
+  _epoch += 1;
+  _reconcilePromise = null; // do not attach to the previous user's in-flight run
+  _pendingProgress.clear();
+  if (_progressTimer) { clearTimeout(_progressTimer); _progressTimer = null; }
+  for (const k of Object.keys(_pendingSettings)) delete _pendingSettings[k];
+  if (_settingsTimer) { clearTimeout(_settingsTimer); _settingsTimer = null; }
+  if (_refetchTimer) { clearTimeout(_refetchTimer); _refetchTimer = null; }
+  // Block stale-enabled writes from firing between the clear below and the
+  // fresh hydrate.
   _enabled = false;
   // Shared-browser safety: a different user logged in — drop the previous
   // user's cached state BEFORE hydrating so it is never shown or imported.
