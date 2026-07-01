@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import UpdateModal from "../components/UpdateModal";
 import UsersAdminPanel from "../components/UsersAdminPanel";
+import { logout } from "../utils/session";
 import {
   storage,
   STORAGE_KEYS,
@@ -3820,6 +3821,33 @@ export default function SettingsPage({
             </div>
           </div>
         </div>
+
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {/* GROUP: ACCOUNT (web build — signed-in session)                     */}
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {isWeb && (
+          <div style={{ scrollMarginTop: 80 }}>
+            <SectionGroupHeader
+              title="Account"
+              subtitle={
+                me
+                  ? `Signed in as ${me.username}${me.role === "admin" ? " (admin)" : ""}`
+                  : "Your session"
+              }
+            />
+            <div style={{ marginBottom: 40 }}>
+              <button
+                className="btn"
+                onClick={async () => {
+                  await logout();
+                  window.location.reload();
+                }}
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ══════════════════════════════════════════════════════════════════ */}
         {/* GROUP: ADMIN (admin accounts only)                                 */}
