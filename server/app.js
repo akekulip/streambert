@@ -1,0 +1,66 @@
+"use strict";
+const path = require("path");
+const fs = require("fs");
+const { getUserById } = require("./lib/users");
+
+const OPEN = ["/api/login", "/api/logout", "/api/events"];
+
+function resolveUser(fastify, req) {
+  const c = req.cookies && req.cookies.sb_session;
+  if (!c) return null;
+  const u = fastify.unsignCookie(c);
+  if (!u.valid || !u.value) return null;
+  const user = getUserById(fastify.db, Number(u.value));
+  return user ? { id: user.id, username: user.username, role: user.role } : null;
+}
+
+async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir }) {
+  const fastify = require("fastify")({ logger: true });
+  await fastify.register(require("@fastify/cookie"), { secret: cookieSecret });
+  await fastify.register(require("@fastify/websocket"));
+
+  fastify.decorate("db", db);
+  fastify.decorate("loginThrottle", loginThrottle);
+  fastify.decorate("config", { DATA_DIR: dataDir });
+  fastify.decorate("sessionValid", (req) => !!resolveUser(fastify, req));
+
+  // Resolve the logged-in user for every /api/* request; gate non-open paths.
+  fastify.addHook("preHandler", async (req, reply) => {
+    if (!req.url.startsWith("/api/")) return;
+    req.user = resolveUser(fastify, req);
+    if (OPEN.some((p) => req.url.startsWith(p))) return;
+    if (!req.user) return reply.code(401).send({ error: "unauthorized" });
+  });
+
+  require("./events")(fastify);
+  await fastify.register(require("./routes/auth"));
+
+  // Existing route modules (unchanged). Register only if present.
+  const tryRegister = async (mod, opts) => {
+    let plugin;
+    try { plugin = require(mod); }
+    catch (e) { if (e && e.code === "MODULE_NOT_FOUND") { fastify.log.warn(`[scaffold] ${mod} missing`); return; } throw e; }
+    await fastify.register(plugin, opts);
+  };
+  await tryRegister("./routes/secure", { prefix: "/api/secure" });
+  await tryRegister("./routes/meta", { prefix: "/api" });
+  await tryRegister("./routes/allmanga", { prefix: "/api/allmanga" });
+  await tryRegister("./routes/downloads", { prefix: "/api/downloads" });
+  await tryRegister("./routes/files", { prefix: "/api/files" });
+  await tryRegister("./routes/subtitles", { prefix: "/api/subtitles" });
+  await tryRegister("./routes/wyzie", { prefix: "/api/wyzie" });
+  await tryRegister("./routes/proxy", { prefix: "/api/proxy" });
+
+  if (distDir && fs.existsSync(distDir)) {
+    await fastify.register(require("@fastify/static"), { root: distDir, prefix: "/" });
+  }
+  fastify.setNotFoundHandler((req, reply) => {
+    if (req.raw.url.startsWith("/api/")) return reply.code(404).send({ error: "not found" });
+    if (distDir && fs.existsSync(path.join(distDir, "index.html"))) return reply.sendFile("index.html");
+    return reply.code(503).send("frontend not built (run npm run build)");
+  });
+
+  return fastify;
+}
+
+module.exports = { buildApp, OPEN };
