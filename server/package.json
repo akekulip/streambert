@@ -5,7 +5,8 @@
   "description": "Streambert web-port backend (ports src/ipc/* to HTTP/WS). See docs/WEB_PORT.md.",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "node --test test/"
   },
   "dependencies": {
     "@fastify/cookie": "^9.4.0",
