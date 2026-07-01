@@ -163,6 +163,15 @@ export const PLAYER_SOURCES = [
   },
 ];
 
+// vidsrc-direct needs the server extractor (web build only); it has no
+// desktop resolver, so hide it outside the web build.
+export const getSelectableSources = () =>
+  PLAYER_SOURCES.filter(
+    (s) =>
+      s.id !== "vidsrc-direct" ||
+      (typeof window !== "undefined" && window.__STREAMBERT_WEB__),
+  );
+
 export const getSourceUrl = (
   sourceId,
   type,

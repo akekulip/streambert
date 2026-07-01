@@ -11,6 +11,7 @@ import {
   tmdbFetch,
   imgUrl,
   PLAYER_SOURCES,
+  getSelectableSources,
   getSourceUrl,
   sourceSupportsProgress,
   sourceProgressViaFrames,
@@ -1113,7 +1114,7 @@ export default function MoviePage({
                 style={{ top: menuPos.top, left: menuPos.left }}
                 onClick={(e) => e.stopPropagation()}
               >
-                {PLAYER_SOURCES.map((src) => (
+                {getSelectableSources().map((src) => (
                   <button
                     key={src.id}
                     className={
