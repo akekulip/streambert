@@ -78,6 +78,8 @@ export function installWebShim() {
     offSubtitleFound: (h) => off("subtitle-found", h),
     onDownloadProgress: (cb) => on("download-progress", cb),
     offDownloadProgress: (h) => off("download-progress", h),
+    onStateChanged: (cb) => on("state-changed", cb),
+    offStateChanged: (h) => off("state-changed", h),
 
     // ── Downloads → /api/downloads (Agent B) ────────────────────────────────
     checkDownloader: (folder) => post("/downloads/check", { folder }),

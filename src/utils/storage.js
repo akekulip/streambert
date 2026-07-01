@@ -2,6 +2,14 @@
 
 const PREFIX = "streambert_";
 
+// Optional post-write hook (registered by utils/userState.js on the web build)
+// so user-level settings written anywhere (e.g. SettingsPage's 21 storage.set
+// call sites) sync to the server without touching every call site.
+let _onSet = null;
+export const registerStorageSetListener = (fn) => {
+  _onSet = fn;
+};
+
 export const storage = {
   get(key) {
     try {
@@ -14,6 +22,7 @@ export const storage = {
   set(key, value) {
     try {
       localStorage.setItem(PREFIX + key, JSON.stringify(value));
+      if (_onSet) _onSet(key, value);
     } catch {}
   },
   remove(key) {

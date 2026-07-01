@@ -77,4 +77,9 @@ export function restoreBackupData(data) {
       localStorage.setItem(PREFIX + key, JSON.stringify(data[key]));
     }
   }
+  // Phase 2: restored localStorage must win over server state on next load —
+  // the dirty flag routes it through POST /api/state/import's merge.
+  try {
+    localStorage.setItem("streambert_dirtyState", JSON.stringify(1));
+  } catch {}
 }
