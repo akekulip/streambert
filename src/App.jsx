@@ -811,13 +811,19 @@ export default function App() {
     [history],
   );
 
-  // Filter by progress/watched
+  // "Continue Watching": things you've opened but not finished.
+  //  - With a tracked position (direct <video>: AllManga / VidSrc Direct), show
+  //    while partway through (2–98%); the card draws a resume bar.
+  //  - Cross-origin embeds (VidSrc/Videasy/VidKing iframes) can't report a
+  //    position, so those items have no pct — still show them (you opened them
+  //    and haven't marked them watched), just without a resume bar.
   const inProgress = useMemo(
     () =>
       historyWithKeys.filter((h) => {
         if (watched[h._pk]) return false;
         const pct = progress[h._pk];
-        return pct != null && pct > 2 && pct < 98;
+        if (pct == null) return true;
+        return pct > 2 && pct < 98;
       }),
     [historyWithKeys, progress, watched],
   );
