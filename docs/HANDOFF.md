@@ -92,6 +92,7 @@ Plays movies/TV as a clean ad-free HLS stream extracted server-side instead of l
 ## 4. Other recent work (all deployed)
 
 - **Multi-user auth (Phase 1 + 2):** SQLite users, scrypt, signed-cookie sessions, admin Users panel. **Phase 2 (per-user server state) done:** watch progress/history/library/settings live in SQLite per user (`/api/state`, spec `docs/superpowers/specs/2026-07-01-per-user-server-state-design.md`) with localStorage as offline cache, one-time migration, and live cross-device sync over `/api/events`. Phase 3 (per-user downloads) NOT started.
+  **Migration caveat:** the one-time localStorage import only runs while the account's server state is empty. If an account was used in several browsers before Phase 2, log in first from the browser with the most complete library — a later browser whose server state is already populated has its local cache overwritten by server truth (by design, so server-side deletions stay deleted).
 - **Streaming sources:** VidSrc / Videasy / VidKing (iframe embeds) + AllManga (anime, direct HLS). Auto-failover when a source can't resolve a title (`src/utils/storage.js` failover cache).
 - **Perf:** brotli/gzip compression, immutable asset caching, keep-alive agents (`proxy.js`, `allmanga.js`), TMDB preconnect, right-sized hero image.
 - **Fullscreen** app-level button on the player (web had none — Electron webview events are a no-op on web).
