@@ -141,7 +141,11 @@ module.exports = async function (fastify) {
     if (isPlaylist) {
       const chunks = [];
       for await (const c of upstream) chunks.push(c);
-      const rewritten = rewriteM3u8(Buffer.concat(chunks).toString("utf8"), url);
+      const rewritten = rewriteM3u8(
+        Buffer.concat(chunks).toString("utf8"),
+        url,
+        referer || DEFAULT_REFERER,
+      );
       return reply
         .header("Content-Type", "application/vnd.apple.mpegurl")
         .header("Access-Control-Allow-Origin", "*")
