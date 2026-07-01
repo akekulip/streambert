@@ -34,6 +34,7 @@ async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir }) {
   fastify.decorate("loginThrottle", loginThrottle);
   fastify.decorate("config", { DATA_DIR: dataDir });
   fastify.decorate("sessionValid", (req) => !!resolveUser(fastify, req));
+  fastify.decorate("resolveUser", (req) => resolveUser(fastify, req));
 
   // Resolve the logged-in user for every /api/* request; gate non-open paths.
   fastify.addHook("preHandler", async (req, reply) => {
