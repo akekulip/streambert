@@ -31,12 +31,15 @@ const PLAYER_STYLE = {
   background: "black",
 };
 
-// <iframe> for movie/TV embed sources. The sandbox attribute is intentionally
-// omitted: videasy/vidsrc/2embed detect a sandboxed iframe and refuse to play
-// (they render an "Iframe Sandbox Detected" notice instead of the video), so
-// sandboxing blocks playback outright. Trade-off: without it these embeds can
-// spawn pop-under ad windows and navigate the top frame. Accepted for a
-// single-user, password-gated self-host; revisit if exposed more broadly.
+// <iframe> for movie/TV embed sources. The sandbox deliberately grants
+// allow-scripts/allow-same-origin/allow-forms/allow-popups (so the player runs
+// and providers don't trip their "Iframe Sandbox Detected" check) but OMITS
+// allow-top-navigation* — that stops an ad script inside the embed from doing
+// `top.location = …` and hijacking/wiping the whole app (observed without an
+// ad-blocker). Pop-under ads can still open but can't navigate the parent tab.
+const EMBED_SANDBOX =
+  "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation";
+
 export function WebEmbedPlayer({ src, hidden, onReady }) {
   return (
     <iframe
@@ -45,6 +48,7 @@ export function WebEmbedPlayer({ src, hidden, onReady }) {
       onLoad={onReady}
       allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
       allowFullScreen
+      sandbox={EMBED_SANDBOX}
       style={{ ...PLAYER_STYLE, visibility: hidden ? "hidden" : "visible" }}
     />
   );
