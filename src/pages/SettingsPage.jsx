@@ -3825,7 +3825,7 @@ export default function SettingsPage({
         {/* ══════════════════════════════════════════════════════════════════ */}
         {/* GROUP: ACCOUNT (web build — signed-in session)                     */}
         {/* ══════════════════════════════════════════════════════════════════ */}
-        {isWeb && (
+        {window.__STREAMBERT_WEB__ && (
           <div style={{ scrollMarginTop: 80 }}>
             <SectionGroupHeader
               title="Account"
