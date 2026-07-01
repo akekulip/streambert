@@ -1,41 +1,38 @@
 import { useState, useRef, useEffect } from "react";
 import { StreambertLogo, PlayIcon } from "./Icons";
+import { login } from "../utils/session";
 
-// Full-screen password gate for the self-hosted web build. Posts to
-// POST /api/login {password} with credentials and reloads on success so the
-// signed cookie is picked up by every subsequent /api call. Reuses the
-// apikey-* styles from SetupScreen for visual consistency.
+// Full-screen username+password gate for the self-hosted web build. Posts to
+// POST /api/login {username, password} and reloads on success so the signed
+// cookie is picked up by every subsequent /api call.
 export default function LoginGate({ onSuccess }) {
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState(null);
-  const [focused, setFocused] = useState(false);
-  const inputRef = useRef(null);
+  const userRef = useRef(null);
 
   useEffect(() => {
-    const t = setTimeout(() => inputRef.current?.focus(), 50);
+    const t = setTimeout(() => userRef.current?.focus(), 50);
     return () => clearTimeout(t);
   }, []);
 
   const handleSubmit = async () => {
-    if (!password || checking) return;
+    if (!username || !password || checking) return;
     setChecking(true);
     setError(null);
     try {
-      const res = await fetch("/api/login", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
-      });
+      const res = await login(username, password);
       if (res.ok) {
         onSuccess();
         return;
       }
       setError(
-        res.status === 401
-          ? "Incorrect password. Try again."
-          : `Sign-in failed (HTTP ${res.status}). Try again.`,
+        res.status === 429
+          ? "Too many attempts. Wait a minute and try again."
+          : res.status === 401
+            ? "Invalid username or password."
+            : `Sign-in failed (HTTP ${res.status}).`,
       );
     } catch {
       setError("Cannot reach the server. Check your connection.");
@@ -51,24 +48,27 @@ export default function LoginGate({ onSuccess }) {
           <StreambertLogo />
         </div>
         <div className="apikey-title">STREAMBERT</div>
-        <p className="apikey-sub">Enter your password to continue.</p>
+        <p className="apikey-sub">Sign in to your account.</p>
+        <input
+          className={`apikey-input${error ? " apikey-input-error" : ""}`}
+          placeholder="Username"
+          autoComplete="username"
+          value={username}
+          onChange={(e) => { setUsername(e.target.value); setError(null); }}
+          onKeyDown={(e) => e.key === "Enter" && !checking && handleSubmit()}
+          ref={userRef}
+          disabled={checking}
+        />
         <input
           type="password"
           className={`apikey-input${error ? " apikey-input-error" : ""}`}
           placeholder="Password"
+          autoComplete="current-password"
           value={password}
-          onChange={(e) => {
-            setPassword(e.target.value);
-            setError(null);
-          }}
+          onChange={(e) => { setPassword(e.target.value); setError(null); }}
           onKeyDown={(e) => e.key === "Enter" && !checking && handleSubmit()}
-          ref={inputRef}
           disabled={checking}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          style={{
-            borderColor: error ? "#f44336" : focused ? "var(--red)" : undefined,
-          }}
+          style={{ marginTop: 10 }}
         />
 
         {error && (
@@ -80,24 +80,11 @@ export default function LoginGate({ onSuccess }) {
 
         <button
           className="btn btn-primary"
-          style={{
-            width: "100%",
-            justifyContent: "center",
-            padding: "13px",
-            marginTop: error ? 0 : undefined,
-          }}
+          style={{ width: "100%", justifyContent: "center", padding: "13px", marginTop: error ? 0 : 12 }}
           onClick={handleSubmit}
-          disabled={!password || checking}
+          disabled={!username || !password || checking}
         >
-          {checking ? (
-            <>
-              <span className="apikey-spinner" /> Signing in…
-            </>
-          ) : (
-            <>
-              <PlayIcon /> Sign in
-            </>
-          )}
+          {checking ? (<><span className="apikey-spinner" /> Signing in…</>) : (<><PlayIcon /> Sign in</>)}
         </button>
       </div>
     </div>
