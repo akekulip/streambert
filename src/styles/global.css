@@ -281,6 +281,41 @@ body,
     overflow-x: hidden;
 }
 
+/* ── Mobile: turn the left rail into a bottom nav bar ─────────────────────── */
+@media (max-width: 600px) {
+    .sidebar {
+        top: auto;
+        bottom: 0;
+        width: 100%;
+        height: 56px;
+        flex-direction: row;
+        justify-content: space-around;
+        align-items: center;
+        padding: 0 4px;
+        gap: 0;
+        border-right: none;
+        border-top: 1px solid var(--border);
+    }
+    /* Logo, separators and the vertical saved-thumbnails list don't fit a
+       horizontal bar — hide them; primary nav stays reachable. */
+    .sidebar-logo,
+    .sidebar-sep,
+    .sidebar-saved {
+        display: none;
+    }
+    .sidebar-bottom {
+        margin-top: 0;
+        display: flex;
+        flex-direction: row;
+        gap: 0;
+    }
+    /* Full-width content; leave room for the fixed bottom bar. */
+    .main {
+        margin-left: 0;
+        padding-bottom: 56px;
+    }
+}
+
 /* ── Hero ──────────────────────────────────────────────────────────────── */
 .hero {
     position: relative;
