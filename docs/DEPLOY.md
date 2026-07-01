@@ -86,11 +86,18 @@ openssl rand -hex 32
 | `STREAMBERT_PASSWORD`      | ✅       | —                        | Login password for the single-user web app. |
 | `STREAMBERT_COOKIE_SECRET` | ✅       | (dev fallback; change it)| Secret that signs the session cookie. |
 | `DOMAIN`                   | ✅       | —                        | Caddy site address (public domain, or LAN host/IP for `tls internal`). |
+| `STREAMBERT_ADMIN_USER`     | ➖       | `admin`                  | Username for the first-run bootstrap admin (only when the user DB is empty). |
+| `STREAMBERT_ADMIN_PASSWORD` | ➖       | (`STREAMBERT_PASSWORD`)  | Password for the bootstrap admin; falls back to `STREAMBERT_PASSWORD`. |
 | `STREAMBERT_TMDB_TOKEN`    | ➖       | (none)                   | TMDB Read Access Token. Set it to pre-seed the key and skip the in-app setup screen; a token saved in the app overrides it. |
 | `TLS_EMAIL`                | ➖       | (none)                   | ACME email for Let's Encrypt notices. |
 | `STREAMBERT_DOWNLOADER`    | ➖       | `/usr/local/bin/vid-dl`  | Path to the downloader CLI inside the container. |
 | `STREAMBERT_DATA`          | (set)    | `/data`                  | Set to `/data` by compose; persisted via `./data`. |
 | `PORT`                     | (set)    | `8787`                   | Server port; keep in sync with the Caddyfile upstream. |
+
+> **Login is now per-user.** On first start an admin account is created (see the
+> two vars above; by default `admin` + `STREAMBERT_PASSWORD`). Create additional
+> users in Settings → Users. `STREAMBERT_PASSWORD` is retained only for the
+> initial admin bootstrap.
 
 ## Step 3 — Choose a networking / TLS mode
 
