@@ -314,6 +314,38 @@ body,
         margin-left: 0;
         padding-bottom: 56px;
     }
+
+    /* Detail hero (movie/TV): the desktop two-column row (200px poster +
+       48px padding) crushes the info into a ~50px strip on a phone. Stack it
+       into a single full-width column instead. */
+    .detail-hero {
+        min-height: 0;
+    }
+    .detail-content {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+        padding: 20px 16px calc(24px + env(safe-area-inset-bottom));
+    }
+    .detail-poster {
+        width: 116px;
+    }
+    .detail-title {
+        font-size: 30px;
+        letter-spacing: 0.5px;
+    }
+    .detail-meta {
+        gap: 12px;
+        margin-bottom: 14px;
+    }
+    .detail-overview {
+        font-size: 14px;
+        max-width: none;
+        margin-bottom: 20px;
+    }
+    .detail-actions {
+        width: 100%;
+    }
 }
 
 /* ── Hero ──────────────────────────────────────────────────────────────── */
