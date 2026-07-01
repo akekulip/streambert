@@ -15,7 +15,10 @@ function resolveUser(fastify, req) {
 }
 
 async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir }) {
-  const fastify = require("fastify")({ logger: true });
+  // trustProxy: behind Caddy, use the X-Forwarded-For client IP (not the
+  // proxy's) so the login throttle keys on the real client and X-Forwarded-Proto
+  // is honored for the secure-cookie decision.
+  const fastify = require("fastify")({ logger: true, trustProxy: true });
   await fastify.register(require("@fastify/cookie"), { secret: cookieSecret });
   await fastify.register(require("@fastify/websocket"));
 

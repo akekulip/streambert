@@ -22,6 +22,16 @@ test("lockout expires after lockoutMs", () => {
   assert.equal(t.isLocked("k"), false);
 });
 
+test("pruning (maxEntries) never drops a currently-locked key", () => {
+  const t = createLoginThrottle({ max: 1, windowMs: 10, lockoutMs: 10000, maxEntries: 1 });
+  t.registerFailure("a"); // count reaches max -> locked for 10s
+  assert.equal(t.isLocked("a"), true);
+  // Spraying distinct keys forces prune() on every call (size >= maxEntries);
+  // the locked "a" entry must survive.
+  for (let i = 0; i < 5; i++) t.registerFailure("spam" + i);
+  assert.equal(t.isLocked("a"), true);
+});
+
 test("failure count resets after the window elapses", async () => {
   const t = createLoginThrottle({ max: 2, windowMs: 20, lockoutMs: 1000 });
   const k = "u|ip";
