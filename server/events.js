@@ -30,17 +30,17 @@ module.exports = function (fastify) {
     }
   });
 
-  fastify.get("/api/events", { websocket: true }, (conn, req) => {
-    // @fastify/websocket v10: conn.socket is the ws. Auth via session cookie.
-    const user = fastify.resolveUser(req);
+  fastify.get("/api/events", { websocket: true }, (socket, request) => {
+    // @fastify/websocket v10: socket is the ws. Auth via session cookie.
+    const user = fastify.resolveUser(request);
     if (!user) {
       try {
-        conn.socket.close();
+        socket.close();
       } catch {}
       return;
     }
-    clients.set(conn.socket, user.id);
-    conn.socket.on("close", () => clients.delete(conn.socket));
-    conn.socket.on("error", () => clients.delete(conn.socket));
+    clients.set(socket, user.id);
+    socket.on("close", () => clients.delete(socket));
+    socket.on("error", () => clients.delete(socket));
   });
 };
