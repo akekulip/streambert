@@ -5,6 +5,11 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Streambert</title>
         <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+        <!-- Warm up the TMDB origins every page depends on (metadata + images). -->
+        <link rel="preconnect" href="https://api.themoviedb.org" crossorigin />
+        <link rel="preconnect" href="https://image.tmdb.org" crossorigin />
+        <link rel="dns-prefetch" href="https://api.themoviedb.org" />
+        <link rel="dns-prefetch" href="https://image.tmdb.org" />
     </head>
     <body>
         <div id="root"></div>

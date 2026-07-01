@@ -18,6 +18,12 @@
 const https = require("https");
 const http = require("http");
 
+// Reuse TCP+TLS connections across requests. HLS playback fetches many
+// segments/manifests from the same CDN through this proxy; without keep-alive
+// each one paid a fresh connect+handshake.
+const keepAliveHttps = new https.Agent({ keepAlive: true, maxSockets: 64 });
+const keepAliveHttp = new http.Agent({ keepAlive: true, maxSockets: 64 });
+
 const DEFAULT_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0";
 const DEFAULT_REFERER = "https://allmanga.to";
@@ -53,6 +59,7 @@ function requestUpstream(targetUrl, opts, hops = 0) {
         path: u.pathname + u.search,
         method: "GET",
         headers,
+        agent: u.protocol === "https:" ? keepAliveHttps : keepAliveHttp,
       },
       (res) => {
         // Follow redirects, preserving the spoofed headers + Range.

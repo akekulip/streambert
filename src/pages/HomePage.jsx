@@ -352,7 +352,7 @@ export default function HomePage({
           <div
             className="hero-bg"
             style={{
-              backgroundImage: `url(${imgUrl(hero.backdrop_path, "original")})`,
+              backgroundImage: `url(${imgUrl(hero.backdrop_path, "w1280")})`,
             }}
           />
           <div className="hero-gradient" />

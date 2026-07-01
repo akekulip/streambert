@@ -14,6 +14,8 @@
 const https = require("https");
 const http = require("http");
 const crypto = require("crypto");
+// Reuse TCP+TLS across the multi-step AllManga/AniList resolve chain.
+const keepAliveHttps = new https.Agent({ keepAlive: true, maxSockets: 32 });
 
 const DEFAULT_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0";
@@ -327,6 +329,7 @@ function allanimeGQL(variables, query) {
           Referer: DEFAULT_REFERER,
           Origin: DEFAULT_REFERER,
         },
+        agent: keepAliveHttps,
       },
       (res) => {
         let data = "";
@@ -368,6 +371,7 @@ function anilistSeasonTitle(baseTitle, seasonNumber) {
         Accept: "application/json",
         "Content-Length": Buffer.byteLength(body),
       },
+      agent: keepAliveHttps,
     };
 
     const fallback = {
