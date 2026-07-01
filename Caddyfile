@@ -1,0 +1,35 @@
+# Streambert — Caddy reverse proxy with automatic HTTPS.
+#
+# {$DOMAIN} and {$TLS_EMAIL} are substituted from the environment (set in .env,
+# passed to the caddy service in docker-compose.yml).
+#
+# iOS/Safari require a secure context (HTTPS) for the app to work, which is why
+# TLS is terminated here rather than on the Node server.
+#
+# --- PUBLIC DOMAIN (default) --------------------------------------------------
+# Caddy obtains and renews a real Let's Encrypt certificate automatically.
+# Requires:
+#   - DOMAIN set to a domain whose DNS A/AAAA record points at this server
+#   - ports 80 and 443 reachable from the public internet
+#
+# --- LAN / Tailscale / self-signed -------------------------------------------
+# When there is no public domain (home LAN, Tailscale, etc.), set DOMAIN to the
+# hostname or IP you'll use (e.g. vision.local, or 100.x.y.z for Tailscale) and
+# uncomment `tls internal` below. Caddy then serves an internally-signed cert;
+# trust Caddy's root CA on your devices (see docs/DEPLOY.md) so the browser
+# accepts the secure context.
+
+{
+	# Uncomment to receive certificate-expiry notices from Let's Encrypt:
+	# email {$TLS_EMAIL}
+}
+
+{$DOMAIN} {
+	# tls internal        # <-- uncomment for LAN / Tailscale / self-signed (no public domain)
+
+	encode gzip zstd
+
+	# Caddy automatically forwards X-Forwarded-Proto=https to the upstream, which
+	# the Streambert server reads to set Secure session cookies.
+	reverse_proxy streambert:8787
+}

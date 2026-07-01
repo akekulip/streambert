@@ -1,0 +1,65 @@
+# Streambert web port — self-hosted stack for the "Vision" server.
+# Values come from a .env file sitting next to this file (see docs/DEPLOY.md).
+#
+#   docker compose up -d --build
+#
+# The `streambert` app is only exposed to the internal compose network; `caddy`
+# terminates TLS and reverse-proxies to it. Uncomment the app `ports:` block
+# below only if you want to hit Node directly (plain HTTP) on the LAN.
+
+services:
+  streambert:
+    build: .
+    image: streambert-web:latest
+    container_name: streambert
+    restart: unless-stopped
+    environment:
+      # Login password for the single-user web app (REQUIRED).
+      STREAMBERT_PASSWORD: ${STREAMBERT_PASSWORD:?set STREAMBERT_PASSWORD in .env}
+      # Secret used to sign the session cookie (REQUIRED). Generate with:
+      #   openssl rand -hex 32
+      STREAMBERT_COOKIE_SECRET: ${STREAMBERT_COOKIE_SECRET:?set STREAMBERT_COOKIE_SECRET in .env}
+      # Persisted data (downloads + secure key store) lives here inside the container.
+      STREAMBERT_DATA: /data
+      PORT: "8787"
+      # Path to the downloader CLI inside the container. Defaults to the image
+      # value; override only if you mount the binary somewhere else.
+      STREAMBERT_DOWNLOADER: ${STREAMBERT_DOWNLOADER:-/usr/local/bin/vid-dl}
+    volumes:
+      # Downloads + secure store persist on the host under ./data.
+      - ./data:/data
+      # Optional: mount a downloader binary from the host if you have one.
+      # - ./bin/vid-dl:/usr/local/bin/vid-dl:ro
+    expose:
+      - "8787"
+    # ports:
+    #   - "8787:8787"   # direct LAN access to Node (HTTP only, bypasses Caddy/TLS)
+    networks: [streambert]
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: streambert-caddy
+    restart: unless-stopped
+    depends_on: [streambert]
+    environment:
+      # Site address Caddy serves. Public domain (automatic HTTPS) or a LAN
+      # hostname/IP when using `tls internal` in the Caddyfile (REQUIRED).
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+      # Optional ACME email for Let's Encrypt expiry notices (see Caddyfile).
+      TLS_EMAIL: ${TLS_EMAIL:-}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data     # persisted TLS certs / ACME account
+      - caddy_config:/config
+    networks: [streambert]
+
+networks:
+  streambert:
+
+volumes:
+  caddy_data:
+  caddy_config:

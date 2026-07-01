@@ -3,6 +3,11 @@ import { useState, useEffect } from "react";
 // Only rendered on Windows (platform === 'win32')
 // Provides minimize / maximize / close buttons and a draggable title area.
 export default function WindowTitlebar() {
+  // Web build has no native window frame — no min/max/close controls.
+  // Returned before any hooks so the hook order stays stable per mount
+  // (the flag is constant for the lifetime of the app).
+  if (typeof window !== "undefined" && window.__STREAMBERT_WEB__) return null;
+
   const [maximized, setMaximized] = useState(false);
 
   // Defined outside useEffect so toggleMaximize can also call it.

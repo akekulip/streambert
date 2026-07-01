@@ -43,6 +43,7 @@ import TrailerModal from "../components/TrailerModal";
 import BlockedStatsModal from "../components/BlockedStatsModal";
 import { useBlockedStats } from "../utils/useBlockedStats";
 import MediaCard from "../components/MediaCard";
+import { WebEmbedPlayer, WebMediaPlayer } from "../components/WebPlayer";
 import { storage } from "../utils/storage";
 import {
   fetchMovieRating,
@@ -101,6 +102,8 @@ export default function MoviePage({
   const [resolvedPlayerUrl, setResolvedPlayerUrl] = useState(null);
   const [resolvingUrl, setResolvingUrl] = useState(false);
   const [resolveError, setResolveError] = useState(null);
+  // Web-only: raw media URL + referer for the HTML5 <video> player (AllManga).
+  const [webMedia, setWebMedia] = useState(null); // { url, referer, startTime }
   const [collection, setCollection] = useState(null); // { name, parts }
   // Webview loading overlay
   const [webviewLoading, setWebviewLoading] = useState(false);
@@ -255,6 +258,7 @@ export default function MoviePage({
     setShowSourceMenu(false);
     setAnilistData(null);
     setResolvedPlayerUrl(null);
+    setWebMedia(null);
     setResolvingUrl(false);
     setResolveError(null);
     setWebviewLoading(true); // instantly blank the player on every source/item switch
@@ -308,6 +312,22 @@ export default function MoviePage({
       })
       .then((res) => {
         if (!mounted) return;
+        // Web: play the raw media URL in an HTML5 <video> (proxied by the
+        // player), skipping the Electron-only local-player handoff.
+        if (window.__STREAMBERT_WEB__) {
+          if (res?.ok && res.url) {
+            setWebMedia({
+              url: res.url,
+              referer: res.referer || "https://allmanga.to",
+              startTime,
+            });
+            setResolvedPlayerUrl(res.url);
+            setM3u8Url(res.url);
+          } else {
+            setResolveError(res?.error || "Movie not found on AllManga");
+          }
+          return;
+        }
         if (res?.ok && res.url) {
           if (res.isDirectMp4 !== undefined) {
             window.electron
@@ -895,31 +915,53 @@ export default function MoviePage({
                 </button>
               </div>
             )}
-            <webview
-              ref={webviewRef}
-              src={
-                pipOpen
-                  ? "about:blank"
-                  : sourceIsAsync(playerSource)
-                    ? resolvedPlayerUrl || "about:blank"
-                    : getSourceUrl(playerSource, "movie", item.id, null, null)
-              }
-              partition="persist:player"
-              allowpopups="false"
-              sandbox="allow-scripts allow-same-origin allow-forms"
-              style={{
-                position: "absolute",
-                inset: 0,
-                width: "100%",
-                height: "100%",
-                border: "none",
-                visibility:
-                  webviewLoading ||
-                  (sourceIsAsync(playerSource) && !resolvedPlayerUrl)
-                    ? "hidden"
-                    : "visible",
-              }}
-            />
+            {window.__STREAMBERT_WEB__ ? (
+              // Web: no <webview>. Direct media (AllManga) → HTML5 <video>;
+              // embed sources (videasy / vidsrc / 2embed) → sandboxed <iframe>.
+              sourceIsAsync(playerSource) ? (
+                webMedia && (
+                  <WebMediaPlayer
+                    src={webMedia.url}
+                    referer={webMedia.referer}
+                    startTime={webMedia.startTime}
+                    hidden={webviewLoading}
+                    onReady={() => setWebviewLoading(false)}
+                  />
+                )
+              ) : (
+                <WebEmbedPlayer
+                  src={getSourceUrl(playerSource, "movie", item.id, null, null)}
+                  hidden={webviewLoading}
+                  onReady={() => setWebviewLoading(false)}
+                />
+              )
+            ) : (
+              <webview
+                ref={webviewRef}
+                src={
+                  pipOpen
+                    ? "about:blank"
+                    : sourceIsAsync(playerSource)
+                      ? resolvedPlayerUrl || "about:blank"
+                      : getSourceUrl(playerSource, "movie", item.id, null, null)
+                }
+                partition="persist:player"
+                allowpopups="false"
+                sandbox="allow-scripts allow-same-origin allow-forms"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                  visibility:
+                    webviewLoading ||
+                    (sourceIsAsync(playerSource) && !resolvedPlayerUrl)
+                      ? "hidden"
+                      : "visible",
+                }}
+              />
+            )}
             {/* Left-side overlay button group, flex row, no fixed px offsets */}
             <div className="player-overlay-group">
               <button

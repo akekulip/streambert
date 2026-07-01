@@ -48,6 +48,7 @@ import {
 import DownloadModal from "../components/DownloadModal";
 import TrailerModal from "../components/TrailerModal";
 import BlockedStatsModal from "../components/BlockedStatsModal";
+import { WebEmbedPlayer, WebMediaPlayer } from "../components/WebPlayer";
 import { useBlockedStats } from "../utils/useBlockedStats";
 import { storage, STORAGE_KEYS } from "../utils/storage";
 import { fetchAniSkipTimings } from "../utils/aniSkip";
@@ -400,6 +401,8 @@ export default function TVPage({
   const [resolvedPlayerUrl, setResolvedPlayerUrl] = useState(null);
   const [resolvingUrl, setResolvingUrl] = useState(false);
   const [resolveError, setResolveError] = useState(null);
+  // Web-only: raw media URL + referer for the HTML5 <video> player (AllManga).
+  const [webMedia, setWebMedia] = useState(null); // { url, referer, startTime }
   const [anilistData, setAnilistData] = useState(null);
   const [anilistSeasons, setAnilistSeasons] = useState(null); // [{seasonNum, title, episodes, year}]
   const [anilistLoading, setAnilistLoading] = useState(false);
@@ -589,6 +592,7 @@ export default function TVPage({
     setInterceptedSubs([]);
     setShowSourceMenu(false);
     setResolvedPlayerUrl(null);
+    setWebMedia(null);
     setResolvingUrl(false);
     setResolveError(null);
     setWebviewLoading(true); // instantly blank the player on every source/episode switch
@@ -661,6 +665,22 @@ export default function TVPage({
       })
       .then((res) => {
         if (!mounted) return;
+        // Web: play the raw media URL in an HTML5 <video> (proxied by the
+        // player), skipping the Electron-only local-player handoff.
+        if (window.__STREAMBERT_WEB__) {
+          if (res?.ok && res.url) {
+            setWebMedia({
+              url: res.url,
+              referer: res.referer || "https://allmanga.to",
+              startTime,
+            });
+            setResolvedPlayerUrl(res.url);
+            setM3u8Url(res.url);
+          } else {
+            setResolveError(res?.error || "Episode not found on AllManga");
+          }
+          return;
+        }
         if (res?.ok && res.url) {
           if (res.isDirectMp4 !== undefined) {
             window.electron
@@ -1665,40 +1685,69 @@ export default function TVPage({
                     </button>
                   </div>
                 )}
-                <webview
-                  ref={webviewRef}
-                  src={
-                    pipOpen
-                      ? "about:blank"
-                      : isAsync
-                        ? resolvedPlayerUrl || "about:blank"
-                        : getSourceUrl(
-                            playerSource,
-                            "tv",
-                            item.id,
-                            playerEp.season,
-                            playerEp.episode,
-                          )
-                  }
-                  partition="persist:player"
-                  allowpopups="false"
-                  sandbox="allow-scripts allow-same-origin allow-forms"
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    width: "100%",
-                    height: "100%",
-                    border: "none",
-                    outline: "none",
-                    boxShadow: "none",
-                    background: "black",
-                    visibility:
-                      webviewLoading || (isAsync && !resolvedPlayerUrl)
-                        ? "hidden"
-                        : "visible",
-                  }}
-                  tabIndex={-1}
-                />
+                {window.__STREAMBERT_WEB__ ? (
+                  // Web: no <webview>. Direct media (AllManga) → HTML5 <video>;
+                  // embed sources (videasy / vidsrc / 2embed) → sandboxed
+                  // <iframe>.
+                  isAsync ? (
+                    webMedia && (
+                      <WebMediaPlayer
+                        src={webMedia.url}
+                        referer={webMedia.referer}
+                        startTime={webMedia.startTime}
+                        hidden={webviewLoading}
+                        onReady={() => setWebviewLoading(false)}
+                      />
+                    )
+                  ) : (
+                    <WebEmbedPlayer
+                      src={getSourceUrl(
+                        playerSource,
+                        "tv",
+                        item.id,
+                        playerEp.season,
+                        playerEp.episode,
+                      )}
+                      hidden={webviewLoading}
+                      onReady={() => setWebviewLoading(false)}
+                    />
+                  )
+                ) : (
+                  <webview
+                    ref={webviewRef}
+                    src={
+                      pipOpen
+                        ? "about:blank"
+                        : isAsync
+                          ? resolvedPlayerUrl || "about:blank"
+                          : getSourceUrl(
+                              playerSource,
+                              "tv",
+                              item.id,
+                              playerEp.season,
+                              playerEp.episode,
+                            )
+                    }
+                    partition="persist:player"
+                    allowpopups="false"
+                    sandbox="allow-scripts allow-same-origin allow-forms"
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      width: "100%",
+                      height: "100%",
+                      border: "none",
+                      outline: "none",
+                      boxShadow: "none",
+                      background: "black",
+                      visibility:
+                        webviewLoading || (isAsync && !resolvedPlayerUrl)
+                          ? "hidden"
+                          : "visible",
+                    }}
+                    tabIndex={-1}
+                  />
+                )}
                 {/* Left-side overlay button group, flex row, no fixed px offsets */}
                 <div className="player-overlay-group">
                   <button

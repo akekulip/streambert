@@ -10,6 +10,7 @@ import {
 import ErrorBoundary from "./components/ErrorBoundary";
 import KeyboardShortcutsModal from "./components/KeyboardShortcutsModal";
 import WindowTitlebar from "./components/WindowTitlebar";
+import LoginGate from "./components/LoginGate";
 import { storage, secureStorage, STORAGE_KEYS } from "./utils/storage";
 import { applyAccentColor } from "./utils/appearance";
 import { collectBackupData } from "./utils/backup";
@@ -46,6 +47,12 @@ export default function App() {
   );
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [platform, setPlatform] = useState(null);
+  // Web-only auth gate: "ok" | "checking" | "required". Desktop skips it.
+  const [authGate, setAuthGate] = useState(() =>
+    typeof window !== "undefined" && window.__STREAMBERT_WEB__
+      ? "checking"
+      : "ok",
+  );
 
   // Navigation history stack for Ctrl+Z back navigation
   const [navStack, setNavStack] = useState([]);
@@ -298,13 +305,39 @@ export default function App() {
   // ── Load API key from secure storage on startup ──
   useEffect(() => {
     let mounted = true;
-    secureStorage.get("apikey").then((val) => {
-      if (!mounted) return;
-      setApiKey(val || null);
-      setApiKeyLoaded(true);
-    });
+    secureStorage
+      .get("apikey")
+      .then((val) => {
+        if (!mounted) return;
+        setApiKey(val || null);
+        setApiKeyLoaded(true);
+      })
+      .catch(() => {
+        // e.g. web build before login returns 401 from /api/secure — don't hang
+        // on the loading screen; the auth gate handles sign-in separately.
+        if (mounted) setApiKeyLoaded(true);
+      });
     return () => {
       mounted = false;
+    };
+  }, []);
+
+  // ── Web auth gate: probe a protected endpoint; 401 → show login ───────────
+  useEffect(() => {
+    if (!window.__STREAMBERT_WEB__) return;
+    let cancelled = false;
+    fetch("/api/version", { credentials: "include" })
+      .then((res) => {
+        if (cancelled) return;
+        setAuthGate(res.status === 401 ? "required" : "ok");
+      })
+      .catch(() => {
+        // Server unreachable: don't trap the user behind the gate, let the app
+        // load and surface its own connectivity errors.
+        if (!cancelled) setAuthGate("ok");
+      });
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -813,6 +846,12 @@ export default function App() {
     },
     [navigate],
   );
+
+  // Web auth gate takes precedence over everything (including secure-store load,
+  // which itself needs the auth cookie).
+  if (authGate === "checking") return null;
+  if (authGate === "required")
+    return <LoginGate onSuccess={() => window.location.reload()} />;
 
   if (!apiKeyLoaded) return null; // wait for secure storage to resolve
   if (!apiKey && !skipped)

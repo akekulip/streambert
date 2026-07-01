@@ -12,6 +12,17 @@ const {
 } = require("electron");
 const path = require("path");
 
+function safeMainLog(message) {
+  try {
+    if (process.stdout && !process.stdout.destroyed) {
+      process.stdout.write(String(message) + "\n");
+      return;
+    }
+  } catch (error) {
+    if (!error || error.code !== "EPIPE") throw error;
+  }
+}
+
 // -- RAM / performance flags ---------------------------------------------------
 app.commandLine.appendSwitch(
   "js-flags",
@@ -33,7 +44,7 @@ app.commandLine.appendSwitch("renderer-process-limit", "3");
 // -- Startup benchmark ---------------------------------------------------------
 const _t0 = Date.now();
 const _bench = (label) =>
-  console.log(`[boot] ${label}: +${Date.now() - _t0}ms`);
+  safeMainLog(`[boot] ${label}: +${Date.now() - _t0}ms`);
 
 // -- Sub-modules ---------------------------------------------------------------
 const blockStats = require("./src/ipc/blockStats");

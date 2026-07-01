@@ -1,0 +1,38 @@
+# Dependencies (reinstalled inside the image)
+node_modules
+**/node_modules
+
+# Build output (frontend is rebuilt in the builder stage)
+dist
+
+# Runtime / persisted data (bind-mounted at deploy time)
+data
+
+# VCS & CI
+.git
+.gitignore
+.github
+
+# Docs, screenshots, archives, editor/tooling cruft
+docs
+screenshots
+*.zip
+streambert.zip
+.omx
+.claude
+*.log
+
+# Secrets & deploy artifacts (never bake into the image)
+.env
+.env.*
+Dockerfile
+docker-compose.yml
+Caddyfile
+
+# Electron/desktop build outputs not used by the web image
+release
+*.AppImage
+*.deb
+*.exe
+*.dmg
+*.blockmap

@@ -41,7 +41,8 @@ function _releaseSlot() {
   }
 }
 
-export const tmdbFetch = async (path, apiKey) => {
+export const tmdbFetch = async (path, apiKey, options = {}) => {
+  const { signal } = options;
   const cacheKey = `${apiKey}|${path}`;
   const cached = _tmdbCache.get(cacheKey);
   if (cached && Date.now() < cached.expiresAt) return cached.data;
@@ -52,6 +53,7 @@ export const tmdbFetch = async (path, apiKey) => {
   try {
     res = await fetch(`${TMDB_BASE}${path}`, {
       headers: { Authorization: `Bearer ${apiKey}` },
+      signal,
     });
   } catch {
     _releaseSlot();

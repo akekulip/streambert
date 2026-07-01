@@ -1,0 +1,16 @@
+{
+  "name": "streambert-server",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Streambert web-port backend (ports src/ipc/* to HTTP/WS). See docs/WEB_PORT.md.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^9.4.0",
+    "@fastify/static": "^7.0.4",
+    "@fastify/websocket": "^10.0.1",
+    "fastify": "^4.28.1"
+  }
+}

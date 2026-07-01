@@ -530,6 +530,8 @@ function VersionSection() {
   });
   const [autoSaved, setAutoSaved] = useState(false);
   const [currentVersion, setCurrentVersion] = useState("0.0.0");
+  // Web build is updated by redeploying the server — no in-app updater.
+  const isWeb = typeof window !== "undefined" && window.__STREAMBERT_WEB__;
 
   useEffect(() => {
     if (window.electron?.getAppVersion) {
@@ -592,16 +594,18 @@ function VersionSection() {
           </code>
         </div>
 
-        <button
-          className="btn btn-ghost"
-          disabled={checking}
-          onClick={runCheck}
-          style={{ opacity: checking ? 0.6 : 1 }}
-        >
-          {checking ? "Checking…" : "Check for Updates"}
-        </button>
+        {!isWeb && (
+          <button
+            className="btn btn-ghost"
+            disabled={checking}
+            onClick={runCheck}
+            style={{ opacity: checking ? 0.6 : 1 }}
+          >
+            {checking ? "Checking…" : "Check for Updates"}
+          </button>
+        )}
 
-        {result && !result.error && result.hasUpdate && (
+        {!isWeb && result && !result.error && result.hasUpdate && (
           <button
             onClick={() => setShowUpdateModal(true)}
             style={{
@@ -629,20 +633,20 @@ function VersionSection() {
           </button>
         )}
 
-        {result && !result.error && !result.hasUpdate && (
+        {!isWeb && result && !result.error && !result.hasUpdate && (
           <span style={{ fontSize: 13, color: "#48c774", fontWeight: 500 }}>
             ✓ You're up to date
           </span>
         )}
 
-        {result?.error && (
+        {!isWeb && result?.error && (
           <span style={{ fontSize: 13, color: "var(--red)" }}>
             ✕ {result.error}
           </span>
         )}
       </div>
 
-      {showUpdateModal && result?.hasUpdate && (
+      {!isWeb && showUpdateModal && result?.hasUpdate && (
         <UpdateModal
           updateInfo={result}
           onClose={() => setShowUpdateModal(false)}
@@ -650,32 +654,36 @@ function VersionSection() {
       )}
 
       {/* Auto-check toggle */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <Toggle
-          value={autoCheck}
-          onChange={toggleAuto}
-          title={autoCheck ? "Disable auto-check" : "Enable auto-check"}
-        />
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}>
-            Check for updates on startup
+      {!isWeb && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <Toggle
+            value={autoCheck}
+            onChange={toggleAuto}
+            title={autoCheck ? "Disable auto-check" : "Enable auto-check"}
+          />
+          <div>
+            <div
+              style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}
+            >
+              Check for updates on startup
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 2 }}>
+              Shows a notification banner if a new version is available. Turned
+              on by default.
+            </div>
           </div>
-          <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 2 }}>
-            Shows a notification banner if a new version is available. Turned on
-            by default.
-          </div>
+          {autoSaved && (
+            <span style={{ fontSize: 12, color: "#48c774" }}>✓ Saved</span>
+          )}
         </div>
-        {autoSaved && (
-          <span style={{ fontSize: 12, color: "#48c774" }}>✓ Saved</span>
-        )}
-      </div>
+      )}
     </div>
   );
 }
@@ -934,7 +942,9 @@ function ScheduledBackupSection() {
     setTimeout(() => setSaved(false), 2000);
   };
 
-  if (!isElectron || loading) return null;
+  // Scheduled backups need a local filesystem + a running desktop process;
+  // hidden on the web build.
+  if (!isElectron || window.__STREAMBERT_WEB__ || loading) return null;
 
   return (
     <div
@@ -3570,7 +3580,7 @@ export default function SettingsPage({
                 value={downloadPath}
                 onChange={(e) => setDownloadPath(e.target.value)}
               />
-              {isElectron && (
+              {isElectron && !window.__STREAMBERT_WEB__ && (
                 <button className="btn btn-secondary" onClick={pickFolder}>
                   Browse …
                 </button>
@@ -3658,20 +3668,24 @@ export default function SettingsPage({
               overflow: "hidden",
             }}
           >
-            {/* Install location */}
-            <div style={{ padding: "22px 24px" }}>
-              <CleanRow
-                title="Install Location"
-                description="Opens the folder where Streambert is installed."
-                buttonLabel="Open Folder"
-                onAction={async () => {
-                  const p = await window.electron?.getInstallPath?.();
-                  if (p) window.electron.openPath(p);
-                }}
-              />
-            </div>
+            {/* Install location — desktop only (opens a local folder) */}
+            {!window.__STREAMBERT_WEB__ && (
+              <>
+                <div style={{ padding: "22px 24px" }}>
+                  <CleanRow
+                    title="Install Location"
+                    description="Opens the folder where Streambert is installed."
+                    buttonLabel="Open Folder"
+                    onAction={async () => {
+                      const p = await window.electron?.getInstallPath?.();
+                      if (p) window.electron.openPath(p);
+                    }}
+                  />
+                </div>
 
-            <div style={{ height: 1, background: "var(--border)" }} />
+                <div style={{ height: 1, background: "var(--border)" }} />
+              </>
+            )}
 
             {/* Cache */}
             <div style={{ padding: "22px 24px" }}>
