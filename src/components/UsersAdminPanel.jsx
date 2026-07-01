@@ -9,37 +9,54 @@ export default function UsersAdminPanel() {
   const [msg, setMsg] = useState(null);
 
   const load = async () => {
-    const res = await fetch("/api/admin/users", { credentials: "include" });
-    if (res.ok) setUsers(await res.json());
+    try {
+      const res = await fetch("/api/admin/users", { credentials: "include" });
+      if (res.ok) setUsers(await res.json());
+      else setMsg(`Failed to load users (HTTP ${res.status})`);
+    } catch {
+      setMsg("Failed to load users — is the server reachable?");
+    }
   };
   useEffect(() => { load(); }, []);
 
   const addUser = async () => {
     setMsg(null);
-    const res = await fetch("/api/admin/users", {
-      method: "POST", credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: newName, password: newPass, role: newRole }),
-    });
-    if (res.ok) { setNewName(""); setNewPass(""); setNewRole("user"); load(); }
-    else setMsg((await res.json().catch(() => ({}))).error || `Failed (HTTP ${res.status})`);
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: newName, password: newPass, role: newRole }),
+      });
+      if (res.ok) { setNewName(""); setNewPass(""); setNewRole("user"); load(); }
+      else setMsg((await res.json().catch(() => ({}))).error || `Failed (HTTP ${res.status})`);
+    } catch {
+      setMsg("Request failed — is the server reachable?");
+    }
   };
 
   const resetPass = async (id) => {
     const pw = window.prompt("New password (min 8 chars):");
     if (!pw) return;
-    const res = await fetch(`/api/admin/users/${id}/reset-password`, {
-      method: "POST", credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: pw }),
-    });
-    setMsg(res.ok ? "Password reset." : ((await res.json().catch(() => ({}))).error || "Failed"));
+    try {
+      const res = await fetch(`/api/admin/users/${id}/reset-password`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pw }),
+      });
+      setMsg(res.ok ? "Password reset." : ((await res.json().catch(() => ({}))).error || "Failed"));
+    } catch {
+      setMsg("Request failed — is the server reachable?");
+    }
   };
 
   const removeUser = async (id) => {
-    const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE", credentials: "include" });
-    if (res.ok) load();
-    else setMsg((await res.json().catch(() => ({}))).error || "Failed");
+    try {
+      const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE", credentials: "include" });
+      if (res.ok) load();
+      else setMsg((await res.json().catch(() => ({}))).error || "Failed");
+    } catch {
+      setMsg("Request failed — is the server reachable?");
+    }
   };
 
   return (
