@@ -34,6 +34,7 @@ async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir }) {
 
   require("./events")(fastify);
   await fastify.register(require("./routes/auth"));
+  await fastify.register(require("./routes/admin"));
 
   // Existing route modules (unchanged). Register only if present.
   const tryRegister = async (mod, opts) => {
