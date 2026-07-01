@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import UpdateModal from "../components/UpdateModal";
+import UsersAdminPanel from "../components/UsersAdminPanel";
 import {
   storage,
   STORAGE_KEYS,
@@ -2830,6 +2831,7 @@ export default function SettingsPage({
   apiKey,
   onChangeApiKey,
   initialSection,
+  me,
 }) {
   const [downloadPath, setDownloadPath] = useState(
     () => storage.get(STORAGE_KEYS.DOWNLOAD_PATH) || "",
@@ -3818,6 +3820,21 @@ export default function SettingsPage({
             </div>
           </div>
         </div>
+
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {/* GROUP: ADMIN (admin accounts only)                                 */}
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {me?.role === "admin" && (
+          <div style={{ scrollMarginTop: 80 }}>
+            <SectionGroupHeader
+              title="Admin"
+              subtitle="Manage user accounts for this Streambert instance"
+            />
+            <div style={{ marginBottom: 40 }}>
+              <UsersAdminPanel />
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

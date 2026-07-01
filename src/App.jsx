@@ -16,6 +16,7 @@ import { applyAccentColor } from "./utils/appearance";
 import { collectBackupData } from "./utils/backup";
 import { tmdbFetch, setApiErrorHandlers } from "./utils/api";
 import { clearAppCaches } from "./utils/storage";
+import { getMe } from "./utils/session";
 
 import Sidebar from "./components/Sidebar";
 import SearchModal from "./components/SearchModal";
@@ -53,6 +54,7 @@ export default function App() {
       ? "checking"
       : "ok",
   );
+  const [me, setMe] = useState(null); // { username, role } | null (web build)
 
   // Navigation history stack for Ctrl+Z back navigation
   const [navStack, setNavStack] = useState([]);
@@ -340,6 +342,14 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  // Load the logged-in user (web build) for role-gated UI.
+  useEffect(() => {
+    if (!window.__STREAMBERT_WEB__) return;
+    let cancelled = false;
+    getMe().then((m) => { if (!cancelled) setMe(m); });
+    return () => { cancelled = true; };
+  }, [authGate]);
 
   // ── Detect platform for Windows titlebar ──────────────────────────────────
   useEffect(() => {
@@ -997,6 +1007,7 @@ export default function App() {
                 apiKey={apiKey}
                 onChangeApiKey={changeApiKey}
                 initialSection={selected?.section}
+                me={me}
               />
             )}
             {page === "downloads" && (
