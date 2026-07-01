@@ -17,6 +17,7 @@
 
 const https = require("https");
 const http = require("http");
+const { rewriteM3u8 } = require("../lib/m3u8");
 
 // Reuse TCP+TLS connections across requests. HLS playback fetches many
 // segments/manifests from the same CDN through this proxy; without keep-alive
@@ -132,6 +133,23 @@ module.exports = async function (fastify) {
       return reply.code(502).send({ error: e.message || "proxy failed" });
     }
 
+    // HLS playlists: buffer + rewrite nested URIs to absolute CDN URLs so the
+    // hls.js ProxyLoader re-proxies each variant/segment (with referer) from
+    // this server's IP. Everything else streams through unchanged.
+    const ctype = (upstream.headers["content-type"] || "").toLowerCase();
+    const isPlaylist = ctype.includes("mpegurl") || parsed.pathname.toLowerCase().endsWith(".m3u8");
+    if (isPlaylist) {
+      const chunks = [];
+      for await (const c of upstream) chunks.push(c);
+      const rewritten = rewriteM3u8(Buffer.concat(chunks).toString("utf8"), url);
+      return reply
+        .header("Content-Type", "application/vnd.apple.mpegurl")
+        .header("Access-Control-Allow-Origin", "*")
+        .header("Cache-Control", "no-store")
+        .code(upstream.statusCode || 200)
+        .send(rewritten);
+    }
+
     // Pass through the upstream status (200 / 206 partial) + selected headers.
     for (const h of PASS_HEADERS) {
       if (upstream.headers[h]) reply.header(h, upstream.headers[h]);
@@ -146,13 +164,8 @@ module.exports = async function (fastify) {
       .header("Cache-Control", "no-store")
       .code(upstream.statusCode || 502);
 
-    // Clean up the upstream socket if the client disconnects (seek / close).
     reply.raw.on("close", () => {
-      try {
-        upstream.destroy();
-      } catch {
-        /* ignore */
-      }
+      try { upstream.destroy(); } catch { /* ignore */ }
     });
 
     return reply.send(upstream);
