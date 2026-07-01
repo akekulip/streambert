@@ -16,6 +16,7 @@ import {
   sourceProgressViaFrames,
   sourceIsAsync,
   getNextNonAsyncSource,
+  getSourceResolver,
   fetchAnilistData,
   cleanAnilistDescription,
   isAnimeContent,
@@ -330,14 +331,20 @@ export default function MoviePage({
     setResolveError(null);
     const startTime = storage.get("dlTime_" + progressKey) || 0;
     let mounted = true;
-    window.electron
-      .resolveAllManga({
-        title,
-        seasonNumber: 1,
-        episodeNumber: 1,
-        isMovie: true,
-        translationType: dubMode,
-      })
+    const resolver = getSourceResolver(playerSource);
+    const resolvePromise =
+      resolver === "vidsrc"
+        ? window.electron
+            .extractVidsrc({ tmdb: String(item.id), type: "movie" })
+            .then((r) => (r?.url ? { ok: true, url: r.url, referer: r.referer } : { ok: false, error: r?.error }))
+        : window.electron.resolveAllManga({
+            title,
+            seasonNumber: 1,
+            episodeNumber: 1,
+            isMovie: true,
+            translationType: dubMode,
+          });
+    resolvePromise
       .then((res) => {
         if (!mounted) return;
         // Web: play the raw media URL in an HTML5 <video> (proxied by the

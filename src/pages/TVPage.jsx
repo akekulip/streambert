@@ -21,6 +21,7 @@ import {
   sourceProgressViaFrames,
   sourceIsAsync,
   getNextNonAsyncSource,
+  getSourceResolver,
   fetchAnilistData,
   fetchEpisodeGroup,
   buildAnilistSeasons,
@@ -704,13 +705,19 @@ export default function TVPage({
     const progressKey = `tv_${item.id}_s${selectedSeason}e${epNum}`;
     const startTime = storage.get("dlTime_" + progressKey) || 0;
     let mounted = true;
-    window.electron
-      .resolveAllManga({
-        title,
-        seasonNumber: selectedSeason,
-        episodeNumber: epNum,
-        translationType: dubMode,
-      })
+    const resolver = getSourceResolver(playerSource);
+    const resolvePromise =
+      resolver === "vidsrc"
+        ? window.electron
+            .extractVidsrc({ tmdb: String(item.id), type: "tv", season: selectedSeason, episode: epNum })
+            .then((r) => (r?.url ? { ok: true, url: r.url, referer: r.referer } : { ok: false, error: r?.error }))
+        : window.electron.resolveAllManga({
+            title,
+            seasonNumber: selectedSeason,
+            episodeNumber: epNum,
+            translationType: dubMode,
+          });
+    resolvePromise
       .then((res) => {
         if (!mounted) return;
         // Web: play the raw media URL in an HTML5 <video> (proxied by the

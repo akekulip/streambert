@@ -102,6 +102,7 @@ export function installWebShim() {
 
     // ── AllManga anime → /api/allmanga (Agent A) ────────────────────────────
     resolveAllManga: (args) => post("/allmanga/resolve", args),
+    extractVidsrc: (args) => post("/extract/vidsrc", args),
     debugAllManga: (args) => post("/allmanga/debug", args),
     setPlayerVideo: (args) => post("/allmanga/set-player-video", args),
 

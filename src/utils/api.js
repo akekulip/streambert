@@ -144,9 +144,22 @@ export const PLAYER_SOURCES = [
     note: null,
     supportsProgress: true,
     async: true,
+    resolver: "allmanga",
     params: {},
     movieUrl: (_id) => "https://allmanga.to",
     tvUrl: (_id, _season, _ep) => "https://allmanga.to",
+  },
+  {
+    id: "vidsrc-direct",
+    label: "VidSrc Direct",
+    tag: null,
+    note: "Server-extracted, ad-free",
+    supportsProgress: false,
+    async: true,
+    resolver: "vidsrc",
+    params: {},
+    movieUrl: (id) => `https://vidsrc.me/embed/movie/${id}`,
+    tvUrl: (id, season, ep) => `https://vidsrc.me/embed/tv/${id}/${season}/${ep}`,
   },
 ];
 
@@ -207,6 +220,10 @@ export const getNextNonAsyncSource = (currentId) => {
   if (idx < 0) return nonAsync[0].id;
   return nonAsync[(idx + 1) % nonAsync.length].id;
 };
+
+// Which async resolver a source uses: "vidsrc" (server extraction) | "allmanga".
+export const getSourceResolver = (sourceId) =>
+  PLAYER_SOURCES.find((s) => s.id === sourceId)?.resolver ?? null;
 
 // Sources that require a transparent webRequest intercept to load properly
 export const NEEDS_INTERCEPT = ["vidsrc"];
