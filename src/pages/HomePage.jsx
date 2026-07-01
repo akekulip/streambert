@@ -17,14 +17,24 @@ const DEFAULT_BROWSE_FILTERS = {
   sortBy: "popularity.desc",
 };
 
-function getRecentHistoryItem(history) {
-  if (!history || history.length === 0) return null;
-  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  const recent = history.filter(
-    (h) => h.watchedAt && h.watchedAt > sevenDaysAgo,
-  );
-  if (recent.length === 0) return null;
-  return recent[Math.floor(Math.random() * recent.length)];
+// Up to `count` unique, most-recently-watched items (last 30 days), newest
+// first, deduped by TMDB id + media_type — used to seed recommendations.
+function getRecentHistoryItems(history, count = 5) {
+  if (!history || history.length === 0) return [];
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const recent = history
+    .filter((h) => h.watchedAt && h.watchedAt > thirtyDaysAgo)
+    .sort((a, b) => b.watchedAt - a.watchedAt);
+  const seen = new Set();
+  const unique = [];
+  for (const item of recent) {
+    const key = `${item.media_type || "movie"}_${item.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(item);
+    if (unique.length >= count) break;
+  }
+  return unique;
 }
 
 function loadBrowseFilters() {
@@ -118,32 +128,45 @@ export default function HomePage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ratingsMap, ageLimitSetting]);
 
-  // Fetch similar items based on recent watch history
+  // Personalised recommendations from several recent history items.
   useEffect(() => {
     if (!apiKey || offline || !history || history.length === 0) return;
-    const source = getRecentHistoryItem(history);
-    if (!source) return;
-    setSimilarSource(source);
-    const type = source.media_type === "tv" ? "tv" : "movie";
-    const tryFetch = (endpoint) =>
-      tmdbFetch(`/${type}/${source.id}/${endpoint}`, apiKey).then((data) =>
-        (data.results || [])
-          .slice(0, 10)
-          .map((item) => ({ ...item, media_type: type })),
-      );
-    tryFetch("similar")
-      .then((results) => {
-        if (results.length > 0) {
-          setSimilarItems(results);
-          return;
+    const sources = getRecentHistoryItems(history, 5);
+    if (sources.length === 0) return;
+    setSimilarSource({ recommended: true }); // sentinel: multi-source row
+    // Exclude titles the user has already watched.
+    const watchedIds = new Set(
+      (history || []).map((h) => `${h.media_type || "movie"}_${h.id}`),
+    );
+    const fetchOne = (source) => {
+      const type = source.media_type === "tv" ? "tv" : "movie";
+      return tmdbFetch(`/${type}/${source.id}/recommendations`, apiKey)
+        .then((data) => {
+          const results = (data.results || []).map((i) => ({
+            ...i,
+            media_type: type,
+          }));
+          if (results.length > 0) return results;
+          // Fall back to /similar when /recommendations is empty.
+          return tmdbFetch(`/${type}/${source.id}/similar`, apiKey).then((d2) =>
+            (d2.results || []).map((i) => ({ ...i, media_type: type })),
+          );
+        })
+        .catch(() => []);
+    };
+    Promise.all(sources.map(fetchOne))
+      .then((lists) => {
+        const seen = new Set();
+        const deduped = [];
+        for (const item of lists.flat()) {
+          const key = `${item.media_type || "movie"}_${item.id}`;
+          if (seen.has(key) || watchedIds.has(key)) continue;
+          seen.add(key);
+          deduped.push(item);
         }
-        return tryFetch("recommendations").then(setSimilarItems);
+        setSimilarItems(deduped.slice(0, 20));
       })
-      .catch(() =>
-        tryFetch("recommendations")
-          .then(setSimilarItems)
-          .catch(() => {}),
-      );
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiKey, offline, history?.length]);
 
@@ -585,16 +608,16 @@ export default function HomePage({
           if (viewMode === "list")
             return renderList(
               "similar",
-              "Similar to",
-              similarSource.title || similarSource.name,
+              "Recommended",
+              "for you",
               similarItems,
             );
           return (
             <TrendingCarousel
               key="similar"
               items={similarItems}
-              title="Similar to"
-              titleHighlight={similarSource.title || similarSource.name}
+              title="Recommended"
+              titleHighlight="for you"
               onSelect={onSelect}
               ratingsMap={enrichedRatingsMap}
             />
