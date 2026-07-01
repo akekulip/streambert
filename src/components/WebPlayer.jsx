@@ -31,15 +31,12 @@ const PLAYER_STYLE = {
   background: "black",
 };
 
-// <iframe> for movie/TV embed sources. The sandbox deliberately grants
-// allow-scripts/allow-same-origin/allow-forms/allow-popups (so the player runs
-// and providers don't trip their "Iframe Sandbox Detected" check) but OMITS
-// allow-top-navigation* — that stops an ad script inside the embed from doing
-// `top.location = …` and hijacking/wiping the whole app (observed without an
-// ad-blocker). Pop-under ads can still open but can't navigate the parent tab.
-const EMBED_SANDBOX =
-  "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation";
-
+// <iframe> for movie/TV embed sources. No sandbox: several providers detect the
+// sandbox *attribute* itself and refuse to play ("Iframe Sandbox Detected"),
+// even when scripts/forms are allowed. Trade-off: without it an ad script in the
+// embed can `top.location = …` and hijack/wipe the app — but that only fires when
+// an ad domain actually loads, which the deployment's AdGuard DNS blocks. So we
+// keep the sandbox off for compatibility and rely on the ad-blocker.
 export function WebEmbedPlayer({ src, hidden, onReady }) {
   return (
     <iframe
@@ -48,7 +45,6 @@ export function WebEmbedPlayer({ src, hidden, onReady }) {
       onLoad={onReady}
       allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
       allowFullScreen
-      sandbox={EMBED_SANDBOX}
       style={{ ...PLAYER_STYLE, visibility: hidden ? "hidden" : "visible" }}
     />
   );
