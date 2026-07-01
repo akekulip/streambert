@@ -97,6 +97,11 @@ export const PLAYER_SOURCES = [
     tag: null,
     note: null,
     supportsProgress: true,
+    colorParam: "color", // hex without # → e.g. "e50914"
+    langParam: null, // no subtitle lang param
+    params: {
+      overlay: "true",
+    },
     movieUrl: (id) => `https://player.videasy.to/movie/${id}`,
     tvUrl: (id, season, ep) =>
       `https://player.videasy.to/tv/${id}/${season}/${ep}`,
@@ -108,20 +113,29 @@ export const PLAYER_SOURCES = [
     note: null,
     supportsProgress: true,
     progressViaFrames: true, // video is in a nested iframe, needs main-process frame query
+    colorParam: null, // vidsrc doesn't support color param
+    langParam: "ds_lang", // ISO 639-1 language code
+    params: {},
+    // Upstream 2.6.0 moved this to vsembed.su, but that domain is currently
+    // down; vidsrc.me is verified reachable + frameable. Revisit if it dies.
     movieUrl: (id) => `https://vidsrc.me/embed/movie/${id}`,
     tvUrl: (id, season, ep) =>
       `https://vidsrc.me/embed/tv/${id}/${season}/${ep}`,
   },
   {
-    id: "2embed",
-    label: "2Embed",
+    id: "vidking",
+    label: "Vidking",
     tag: null,
-    note: "unstable",
+    note: null,
     supportsProgress: true,
-    progressViaFrames: true,
-    movieUrl: (id) => `https://www.2embed.online/embed/movie/${id}`,
+    colorParam: "color", // hex without # → e.g. "e50914"
+    langParam: null,
+    params: {
+      autoPlay: "true",
+    },
+    movieUrl: (id) => `https://www.vidking.net/embed/movie/${id}`,
     tvUrl: (id, season, ep) =>
-      `https://www.2embed.online/embed/tv/${id}/${season}/${ep}`,
+      `https://www.vidking.net/embed/tv/${id}/${season}/${ep}`,
   },
   {
     id: "allmanga",
@@ -130,15 +144,49 @@ export const PLAYER_SOURCES = [
     note: null,
     supportsProgress: true,
     async: true,
+    params: {},
     movieUrl: (_id) => "https://allmanga.to",
     tvUrl: (_id, _season, _ep) => "https://allmanga.to",
   },
 ];
 
-export const getSourceUrl = (sourceId, type, id, season, ep) => {
+export const getSourceUrl = (
+  sourceId,
+  type,
+  id,
+  season,
+  ep,
+  extraParams = {},
+  // Optional: accent hex (with or without #) and subtitle ISO lang code
+  accentColor = null,
+  subtitleLang = null,
+) => {
   const src =
     PLAYER_SOURCES.find((s) => s.id === sourceId) ?? PLAYER_SOURCES[0];
-  return type === "movie" ? src.movieUrl(id) : src.tvUrl(id, season, ep);
+  const baseUrl =
+    type === "movie" ? src.movieUrl(id) : src.tvUrl(id, season, ep);
+  const url = new URL(baseUrl);
+
+  Object.entries(src.params || {}).forEach(([key, value]) => {
+    url.searchParams.set(key, value);
+  });
+
+  // Inject accent color into the player if the source supports it
+  if (accentColor && src.colorParam) {
+    url.searchParams.set(src.colorParam, accentColor.replace(/^#/, ""));
+  }
+
+  if (subtitleLang && src.langParam) {
+    url.searchParams.set(src.langParam, subtitleLang);
+  }
+
+  Object.entries(extraParams).forEach(([key, value]) => {
+    if (value != null) {
+      url.searchParams.set(key, value);
+    }
+  });
+
+  return url.toString();
 };
 
 export const sourceSupportsProgress = (sourceId) =>
@@ -150,8 +198,18 @@ export const sourceProgressViaFrames = (sourceId) =>
 export const sourceIsAsync = (sourceId) =>
   PLAYER_SOURCES.find((s) => s.id === sourceId)?.async ?? false;
 
+// Return the next non-async source after `currentId` in PLAYER_SOURCES order.
+// Used to auto-fail over to another provider (e.g. when AllManga lacks an episode).
+export const getNextNonAsyncSource = (currentId) => {
+  const nonAsync = PLAYER_SOURCES.filter((s) => !s.async);
+  if (nonAsync.length === 0) return null;
+  const idx = nonAsync.findIndex((s) => s.id === currentId);
+  if (idx < 0) return nonAsync[0].id;
+  return nonAsync[(idx + 1) % nonAsync.length].id;
+};
+
 // Sources that require a transparent webRequest intercept to load properly
-export const NEEDS_INTERCEPT = ["vidsrc", "2embed"];
+export const NEEDS_INTERCEPT = ["vidsrc"];
 
 // ── AniList API (anime metadata) ──────────────────────────────────────────────
 const ANILIST_API = "https://graphql.anilist.co";
