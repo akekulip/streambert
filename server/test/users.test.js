@@ -17,7 +17,7 @@ test("createUser rejects short passwords and duplicates", () => {
   const d = db();
   assert.throws(() => U.createUser(d, { username: "bob", password: "short" }));
   U.createUser(d, { username: "bob", password: "password1" });
-  assert.throws(() => U.createUser(d, { username: "BOB", password: "password1" }), /taken/);
+  assert.throws(() => U.createUser(d, { username: "BOB", password: "password1" }), (e) => e.code === "DUP");
 });
 
 test("resetPassword changes the stored hash", () => {

@@ -11,7 +11,8 @@ function insertUser(db, { username, password, role = "user" }) {
       .prepare("INSERT INTO users (username, pw_hash, pw_salt, role, created_at) VALUES (?,?,?,?,?)")
       .run(uname, hash, salt, role, created_at);
   } catch (e) {
-    if (String(e.message).includes("UNIQUE")) {
+    // better-sqlite3 exposes a structured code; fall back to the message text.
+    if (e.code === "SQLITE_CONSTRAINT_UNIQUE" || String(e.message).includes("UNIQUE")) {
       const err = new Error("username taken");
       err.code = "DUP";
       throw err;
