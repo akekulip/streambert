@@ -1,6 +1,17 @@
 "use strict";
 const { hashPassword, verifyPassword } = require("./passwords");
 
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+function isValidIdentifier(s) {
+  const v = String(s || "").trim();
+  if (EMAIL_RE.test(v)) return true;
+  const digits = v.replace(/[^0-9]/g, "");
+  return /^\+?[0-9][0-9\s-]*$/.test(v) && digits.length >= 7; // plausible phone
+}
+function isValidPassword(s) {
+  return String(s || "").length >= 8;
+}
+
 function insertUser(db, { username, password, role = "user" }) {
   const uname = String(username || "").trim();
   const { hash, salt } = hashPassword(password);
@@ -72,4 +83,5 @@ function bootstrapAdmin(db, { adminUser, adminPassword }) {
 module.exports = {
   insertUser, createUser, getUserByUsername, getUserById, listUsers,
   countAdmins, resetPassword, deleteUser, bootstrapAdmin, verifyPassword,
+  isValidIdentifier, isValidPassword,
 };
