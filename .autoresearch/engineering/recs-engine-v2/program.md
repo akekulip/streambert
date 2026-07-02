@@ -76,3 +76,9 @@ history under the old metric:
   Only real-user data changes this picture — real taste-jumps follow actual
   trending popularity, so exploration should be re-tested once
   fixtures/real/histories.json is populated (node eval/recs/harvest_real.mjs).
+
+**Harvest 2026-07-02:** ran harvest_real.mjs against prod — 1 user, 2 history
+rows. Below the ≥8 items/user threshold; run_eval.mjs yields real_hit_rate
+n/a (0/0 holdouts). Pipeline verified end-to-end (SSH export + TMDB fixture
+recording). Re-harvest once more real watches land; until then the experiment
+stays parked at the synthetic ceiling (row_score 0.8800).

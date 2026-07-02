@@ -1,1 +1,21 @@
-[]
+[
+ {
+  "user": "real-u1",
+  "items": [
+   {
+    "media_type": "movie",
+    "tmdb_id": 1275779,
+    "season": null,
+    "episode": null,
+    "watched_at": 1782942785161
+   },
+   {
+    "media_type": "tv",
+    "tmdb_id": 94997,
+    "season": 1,
+    "episode": 1,
+    "watched_at": 1782999766095
+   }
+  ]
+ }
+]
