@@ -14,6 +14,10 @@ gated group at the bottom of the 3,900-line Settings page. Philip wants:
   changes — full audit-style log),
 - full control surface: existing controls plus disable/enable accounts,
   force logout (session revocation), and promote/demote admins.
+- system-level settings (API tokens, download path) hidden from normal
+  users — their Settings page affects only their own profile/experience
+  (see §3a; this closes a real security gap where any user could overwrite
+  the shared API tokens).
 
 ## Approach (chosen)
 
@@ -88,9 +92,10 @@ role gate):
     via the `before` cursor.
   - **Users** — the existing `UsersAdminPanel` extended with: role select
     (promote/demote), enable/disable toggle, revoke-sessions button.
-  - **System** — extraction canary status + "Run check now" and the
-    recs-cache purge (moved out of `AdminDashboard` so Overview stays
-    analytics-only).
+  - **System** — extraction canary status + "Run check now", recs-cache
+    purge (moved out of `AdminDashboard` so Overview stays analytics-only),
+    and the **system-level settings** moved out of the normal Settings page
+    (see §3a).
 - **Sidebar** (`src/components/Sidebar.jsx`): shield icon between Downloads
   and Settings, rendered only when `me?.role === "admin"`, navigating to
   the new `page === "admin"` route in `App.jsx`.
@@ -99,7 +104,43 @@ role gate):
 - **SettingsPage.jsx**: delete the ADMIN group and the
   `AdminDashboard`/`UsersAdminPanel` imports — Settings is user-only again.
 
-## 4. Testing & rollout
+## 3a. Settings scope split (system vs. per-user)
+
+Motivation: normal users must not see or edit deployment-wide settings —
+their Settings page should only affect their own profile and experience.
+Today `server/routes/secure.js` is a **single global `secure.json` with no
+role gate**, so any logged-in user can read *and overwrite* the shared TMDB
+/ SubDL / Wyzie tokens for the whole deployment. This is a security gap, not
+just a UI-tidiness issue.
+
+**System-level → move to Admin page "System" tab, admin-only:**
+
+- TMDB Read Access Token (`apikey`)
+- SubDL API key (`subdlApiKey`), Wyzie API key (`wyzieApiKey`)
+- Download path (`downloadPath`) — a server disk location
+- Update settings (auto-check) — deployment/desktop concern
+- (App version display is harmless and can stay visible to everyone.)
+
+**Per-user → stays in Settings:**
+
+- Content: parental controls / age rating
+- Playback: trailer source, auto-watched behavior
+- Subtitles: **preferred language only** (the API key moves — this group
+  gets split)
+- Notifications, Interface (appearance/layout/start page), Library
+  (sort/history), Backup & Restore (their own data)
+
+**Server enforcement (the actual fix):** gate `PUT /api/secure/:key` behind
+`req.user.role === "admin"` so a normal user can't overwrite shared secrets.
+`GET` needs a decision during planning: if any client path for a normal user
+reads a secret to function, keep read open but return a masked/boolean
+"is set" instead of the raw value; otherwise gate reads too. In the web
+build TMDB already flows through the server proxy (`fastify.tmdbFetch` with
+the env token), so the client likely does not need the raw `apikey` — verify
+before gating reads.
+
+**Out of scope here:** admin-*enforced* per-user policy (e.g. locking a
+child account's parental controls) — that's a separate feature.
 
 - Server tests (node test suites under `server/test/`):
   - activity capture for all three hooks, incl. search debounce collapse
@@ -109,7 +150,9 @@ role gate):
   - disabled account: blocked at login AND existing session rejected;
   - epoch revocation (revoke endpoint, disable, password reset);
   - role PATCH incl. last-admin guards;
-  - legacy `"<id>"` cookie still resolves (epoch-0 compat).
+  - legacy `"<id>"` cookie still resolves (epoch-0 compat);
+  - `PUT /api/secure/:key` rejected (403) for a normal user, allowed for
+    an admin (§3a enforcement).
 - Client: manual verification via the web dev build (admin sees the shield
   + page; non-admin sees neither; Settings shows no admin group).
 - Deploy: rebuild the prod image and redeploy on the Vision host as usual —
