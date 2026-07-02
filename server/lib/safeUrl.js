@@ -9,7 +9,7 @@ function isBlockedHost(hostname) {
   // so the range checks below can't be bypassed by either form. WHATWG URL
   // parsing (new URL().hostname) canonicalizes the mapped address to hex
   // groups (::ffff:7f00:1), so both the dotted and hex forms are handled.
-  let host = String(hostname).toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  let host = String(hostname).toLowerCase().replace(/^\[|\]$/g, "").replace(/\.+$/, "");
   const v4mappedDotted = host.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
   const v4mappedHex = host.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
   if (v4mappedDotted) {
@@ -45,8 +45,12 @@ function assertPublicHttpUrl(rawUrl) {
 }
 
 // Resolves the hostname and rejects if ANY resolved address is blocked —
-// closes the DNS-rebinding gap where a public-looking hostname resolves to a
-// private/internal IP (string checks on the hostname alone can't catch this).
+// catches a public-looking hostname that consistently resolves to a
+// private/internal IP (string checks on the hostname alone can't catch this,
+// e.g. a public DNS name like 127.0.0.1.nip.io). This is a resolve-time check
+// only: it does not pin the resolved IP for the subsequent connection, so a
+// true DNS-rebinding race (attacker flips the answer between this check and
+// the connect that follows) is a known residual risk, not one this closes.
 async function assertResolvedPublic(u) {
   assertPublicHttpUrl(u.href);
   const hostname = u.hostname.replace(/^\[|\]$/g, "");

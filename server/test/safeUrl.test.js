@@ -1,7 +1,7 @@
 "use strict";
 const { test } = require("node:test");
 const assert = require("node:assert");
-const { isBlockedHost, assertPublicHttpUrl, safeFetch } = require("../lib/safeUrl");
+const { isBlockedHost, assertPublicHttpUrl, assertResolvedPublic, safeFetch } = require("../lib/safeUrl");
 test("blocks loopback / private / link-local / internal literals + names", () => {
   for (const h of ["127.0.0.1","0.0.0.0","::1","169.254.169.254","10.0.0.5","192.168.1.1","172.16.0.9","localhost","streambert-extractor","foo.internal","bar.local"])
     assert.equal(isBlockedHost(h), true, h);
@@ -36,4 +36,11 @@ test("safeFetch blocks disallowed hosts before making a request", async () => {
   await assert.rejects(() => safeFetch("http://169.254.169.254/"), (e) => e.code === "BLOCKED_URL");
   await assert.rejects(() => safeFetch("http://127.0.0.1/x"), (e) => e.code === "BLOCKED_URL");
   await assert.rejects(() => safeFetch("http://[::ffff:127.0.0.1]/"), (e) => e.code === "BLOCKED_URL");
+});
+test("assertResolvedPublic rejects literal private/loopback and ipv4-mapped", async () => {
+  await assert.rejects(() => assertResolvedPublic(new URL("http://127.0.0.1/x")), (e)=>e.code==="BLOCKED_URL");
+  await assert.rejects(() => assertResolvedPublic(new URL("http://[::ffff:127.0.0.1]/")), (e)=>e.code==="BLOCKED_URL");
+});
+test("isBlockedHost strips multiple trailing dots", () => {
+  assert.equal(isBlockedHost("localhost.."), true);
 });

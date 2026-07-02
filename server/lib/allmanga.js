@@ -14,7 +14,7 @@
 const https = require("https");
 const http = require("http");
 const crypto = require("crypto");
-const { assertPublicHttpUrl } = require("./safeUrl");
+const { assertResolvedPublic } = require("./safeUrl");
 // Reuse TCP+TLS across the multi-step AllManga/AniList resolve chain.
 const keepAliveHttps = new https.Agent({ keepAlive: true, maxSockets: 32 });
 
@@ -181,18 +181,23 @@ function parseEpisodeSourceUrls(body) {
 }
 
 // GET a URL following redirects, returning { status, body }. Referer is set to
-// allmanga.to by default (clock.json endpoints are Referer-gated). Each
-// redirect hop is re-validated (a public URL can 302 to an internal address)
-// and capped so a malicious/broken upstream can't redirect forever.
+// allmanga.to by default (clock.json endpoints are Referer-gated). The entry
+// URL and every redirect hop are re-validated with assertResolvedPublic (DNS-
+// resolved-IP check, not just a string check on the hostname) so a public
+// hostname that resolves to a private/internal address is rejected before
+// connecting, and hops are capped so a malicious/broken upstream can't
+// redirect forever. Universal here: httpsGet's other (fixed-host) callers hit
+// public allmanga/allanime hosts, which pass this check fine.
 const HTTPS_GET_MAX_HOPS = 6;
-function httpsGet(urlStr, referer = DEFAULT_REFERER, hops = 0) {
+async function httpsGet(urlStr, referer = DEFAULT_REFERER, hops = 0) {
+  if (hops > HTTPS_GET_MAX_HOPS) {
+    const e = new Error("too many redirects");
+    e.code = "BLOCKED_URL";
+    throw e;
+  }
+  const u = new URL(urlStr);
+  await assertResolvedPublic(u);
   return new Promise((resolve, reject) => {
-    if (hops > HTTPS_GET_MAX_HOPS) {
-      const e = new Error("too many redirects");
-      e.code = "BLOCKED_URL";
-      return reject(e);
-    }
-    const u = new URL(urlStr);
     const lib = u.protocol === "https:" ? https : http;
     const req = lib.request(
       {
@@ -218,12 +223,6 @@ function httpsGet(urlStr, referer = DEFAULT_REFERER, hops = 0) {
             ? res.headers.location
             : new URL(res.headers.location, urlStr).href;
           res.resume();
-          try {
-            assertPublicHttpUrl(loc);
-          } catch (e) {
-            reject(e);
-            return;
-          }
           httpsGet(loc, referer, hops + 1).then(resolve, reject);
           return;
         }
@@ -916,7 +915,7 @@ ${
 // and avoids needing to set the browser-forbidden Referer header client-side.
 
 async function fetchM3u8(url, referer) {
-  assertPublicHttpUrl(url);
+  await assertResolvedPublic(new URL(url));
   const r = await httpsGet(url, referer || DEFAULT_REFERER);
   if (r.status !== 200 || !r.body) {
     const err = new Error("upstream " + r.status);
