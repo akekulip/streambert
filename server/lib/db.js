@@ -67,6 +67,14 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_watch_events_user ON watch_events (user_id, watched_at);
   `);
 
+  // Registration/approval: add users.status if missing (existing rows -> active).
+  // ALTER-added column omits CHECK (SQLite can't always add a CHECK column);
+  // valid values ('pending'|'active'|'disabled') are enforced in lib/users.js.
+  const userCols = db.prepare("PRAGMA table_info(users)").all();
+  if (!userCols.some((c) => c.name === "status")) {
+    db.exec("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'");
+  }
+
   // history is an upsert-per-title snapshot; watch_events (analytics) is the
   // append-only log. One-time seed so dashboards aren't empty on upgrade.
   const hasEvents = db.prepare("SELECT 1 FROM watch_events LIMIT 1").get();

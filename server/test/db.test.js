@@ -31,3 +31,15 @@ test("openDb reopening the same file is idempotent and preserves data", () => {
   db2.close();
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test("users.status column exists and defaults to active", () => {
+  const { insertUser } = require("../lib/users");
+  const db = openDb(":memory:");
+  insertUser(db, { username: "u1@example.com", password: "password1" });
+  const row = db.prepare("SELECT status FROM users WHERE username = 'u1@example.com' COLLATE NOCASE").get();
+  assert.equal(row.status, "active");
+  // idempotent: migrate again (re-open same handle path is n/a for :memory:, so
+  // just assert the PRAGMA shows exactly one status column)
+  const cols = db.prepare("PRAGMA table_info(users)").all().filter((c) => c.name === "status");
+  assert.equal(cols.length, 1);
+});
