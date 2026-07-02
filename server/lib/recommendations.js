@@ -39,7 +39,8 @@ function recentSeeds(history, now, count) {
  *                                   (e.g. "/movie/550/recommendations")
  * @param {number} [opts.limit=20]
  * @param {number} [opts.now=Date.now()]
- * @returns {Promise<Array<{media_type: string, id: number}>>} ranked list
+ * @returns {Promise<Array>} ranked TMDB items (full list-endpoint fields plus
+ *                           media_type) so callers can render cards directly
  */
 async function recommend({ history, fetchTmdb, limit = 20, now = Date.now() }) {
   if (!Array.isArray(history) || history.length === 0) return [];
@@ -83,7 +84,7 @@ async function recommend({ history, fetchTmdb, limit = 20, now = Date.now() }) {
       const gain = w * Math.max(0, 1 - rank / 25);
       const prev = scored.get(key);
       if (prev) prev.score += gain;
-      else scored.set(key, { media_type: item.media_type, id: item.id, score: gain });
+      else scored.set(key, { item, score: gain });
     });
   });
   // Hybrid: the newest seed's top picks stay verbatim (its native TMDB order
@@ -96,13 +97,13 @@ async function recommend({ history, fetchTmdb, limit = 20, now = Date.now() }) {
     const key = titleKey(item.media_type, item.id);
     if (watchedKeys.has(key) || headKeys.has(key)) continue;
     headKeys.add(key);
-    head.push({ media_type: item.media_type, id: item.id });
+    head.push(item);
     if (head.length >= HEAD_FROM_NEWEST) break;
   }
   const rest = [...scored.values()]
-    .filter((i) => !headKeys.has(titleKey(i.media_type, i.id)))
+    .filter((s) => !headKeys.has(titleKey(s.item.media_type, s.item.id)))
     .sort((a, b) => b.score - a.score)
-    .map(({ media_type, id }) => ({ media_type, id }));
+    .map((s) => s.item);
   return [...head, ...rest].slice(0, limit);
 }
 
