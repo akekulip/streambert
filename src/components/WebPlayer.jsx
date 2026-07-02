@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 
 import { useVideoController } from "./player/useVideoController";
 import { useProgressSaver } from "./player/useProgressSaver";
+import { useSubtitles } from "./player/useSubtitles";
 import VideoControls from "./player/VideoControls";
 
 // Browser player elements used only when window.__STREAMBERT_WEB__ is set.
@@ -56,7 +57,8 @@ export function WebEmbedPlayer({ src, hidden, onReady }) {
 
 // HTML5 <video> for direct media. Uses hls.js for .m3u8 (with native HLS
 // fallback on Safari/iOS) and plain <video> for .mp4. Remote URLs are proxied.
-export function WebMediaPlayer({ src, referer, startTime = 0, hidden, onReady, wrapRef, subs = null,
+export function WebMediaPlayer({ src, referer, startTime = 0, hidden, onReady, wrapRef,
+  tmdbId, mediaType, season, episode,
   progressKey, onSaveProgress, onMarkWatched, watchedThreshold, storage }) {
   const videoRef = useRef(null);
   const seekedRef = useRef(false);
@@ -113,6 +115,9 @@ export function WebMediaPlayer({ src, referer, startTime = 0, hidden, onReady, w
     };
   }, [src, referer]);
 
+  const subsCtl = useSubtitles({ active: !hidden && !!src, tmdbId, mediaType, season, episode });
+  const subs = subsCtl.tracks.length ? subsCtl : null;
+
   const { state, actions } = useVideoController(videoRef, {
     wrapRef,
     onToggleCaptions: () => subs && (subs.current ? subs.off() : subs.tracks[0] && subs.select(subs.tracks[0].id)),
@@ -145,7 +150,11 @@ export function WebMediaPlayer({ src, referer, startTime = 0, hidden, onReady, w
         onCanPlay={onReady}
         onClick={actions.togglePlay}
         style={{ ...PLAYER_STYLE, visibility: hidden ? "hidden" : "visible" }}
-      />
+      >
+        {subsCtl.url && (
+          <track kind="subtitles" default src={toMediaSrc(subsCtl.url, referer)} srcLang="sub" label="Subtitles" />
+        )}
+      </video>
       {!hidden && <VideoControls state={state} actions={actions} subs={subs} visible={controlsVisible} />}
     </div>
   );
