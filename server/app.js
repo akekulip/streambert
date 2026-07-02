@@ -72,10 +72,13 @@ async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir, tmd
     const isVzy = req.url.startsWith("/vzy");
     if (!isApi && !isVzy) return;
     req.user = resolveUser(fastify, req);
-    if (isApi && OPEN.some((p) => req.url.startsWith(p))) return;
+    const pathOnly = req.url.split("?")[0];
+    // OPEN entries are exact endpoints (no sub-paths) — match exactly, not by
+    // prefix, so a future route can't collide its way past the gate.
+    if (isApi && OPEN.includes(pathOnly)) return;
     if (!req.user) return reply.code(401).send({ error: "unauthorized" });
     // Pending/suspended accounts may reach only /api/me (+ /api/logout via OPEN).
-    if (req.user.status !== "active" && !req.url.startsWith("/api/me")) {
+    if (req.user.status !== "active" && pathOnly !== "/api/me") {
       return reply.code(403).send({ error: "account not active", status: req.user.status });
     }
   });

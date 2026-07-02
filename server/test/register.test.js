@@ -99,3 +99,13 @@ test("/vzy requires a session (401 anon)", async () => {
   assert.equal(r.statusCode, 401);
   await app.close();
 });
+test("gate uses exact path match: pending user's /api/me?x=1 is allowed, content still 403", async () => {
+  const { app } = await makeApp();
+  await app.inject({ method: "POST", url: "/api/register", payload: { identifier: "exact@x.com", password: "password1" } });
+  const cookie = await loginCookie(app, "exact@x.com", "password1");
+  const me = await app.inject({ method: "GET", url: "/api/me?x=1", cookies: { sb_session: cookie } });
+  assert.equal(me.statusCode, 200);
+  const content = await app.inject({ method: "GET", url: "/api/state/bootstrap", cookies: { sb_session: cookie } });
+  assert.equal(content.statusCode, 403);
+  await app.close();
+});
