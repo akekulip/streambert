@@ -125,6 +125,16 @@ export function WebMediaPlayer({ src, referer, startTime = 0, hidden, onReady, w
   });
   useKeyboardShortcuts({ active: !hidden && !!src, actions });
   useProgressSaver({ videoRef, active: !hidden && !!src, progressKey, onSaveProgress, onMarkWatched, watchedThreshold, storage });
+  // Force the attached <track> to show — browsers don't reliably honor the
+  // `default` attribute on a dynamically-added track. Runs after the track
+  // element mounts for the current subtitle URL.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || !v.textTracks) return;
+    for (let i = 0; i < v.textTracks.length; i++) {
+      v.textTracks[i].mode = subsCtl.url ? "showing" : "disabled";
+    }
+  }, [subsCtl.url]);
   const [controlsVisible, setControlsVisible] = useState(true);
   const hideTimer = useRef(null);
   const poke = useCallback(() => {
@@ -154,7 +164,7 @@ export function WebMediaPlayer({ src, referer, startTime = 0, hidden, onReady, w
         style={{ ...PLAYER_STYLE, visibility: hidden ? "hidden" : "visible" }}
       >
         {subsCtl.url && (
-          <track kind="subtitles" default src={toMediaSrc(subsCtl.url, referer)} srcLang="sub" label="Subtitles" />
+          <track key={subsCtl.url} kind="subtitles" default src={toMediaSrc(subsCtl.url, referer)} srcLang="sub" label="Subtitles" />
         )}
       </video>
       {!hidden && <VideoControls state={state} actions={actions} subs={subs} visible={controlsVisible} />}

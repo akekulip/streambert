@@ -83,6 +83,17 @@ module.exports = async function (fastify) {
     subs.getSubtitleUrl(req.body || {}, { dataDir }),
   );
 
+  // WebVTT for the browser player's <track> (SRT→VTT converted, served over
+  // HTTP so a same-origin <track src> can load it — file:// / .srt can't).
+  fastify.get("/vtt", async (req, reply) => {
+    const r = await subs.getSubtitleVtt({ fileId: (req.query || {}).fileId });
+    if (!r.ok) return reply.code(502).send({ error: r.error });
+    return reply
+      .header("Content-Type", "text/vtt; charset=utf-8")
+      .header("Cache-Control", "private, max-age=3600")
+      .send(r.vtt);
+  });
+
   fastify.post("/download", async (req) =>
     subs.downloadSubtitlesForFile(req.body || {}, { store }),
   );

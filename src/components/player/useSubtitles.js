@@ -28,11 +28,13 @@ export function useSubtitles({ active, tmdbId, mediaType, season, episode }) {
     return () => { cancelled = true; };
   }, [active, tmdbId, mediaType, season, episode]);
 
-  const select = useCallback(async (id) => {
+  const select = useCallback((id) => {
     const t = tracks.find((x) => x.id === id);
     if (!t) return;
-    const r = await window.electron.getSubtitleUrl({ fileId: t.id }).catch(() => null);
-    if (r?.url) { setUrl(r.url); setCurrent(id); }
+    // Same-origin endpoint converts SubDL/Wyzie SRT to WebVTT so the browser
+    // <track> can parse it (auth cookie rides along automatically).
+    setUrl(`/api/subtitles/vtt?fileId=${encodeURIComponent(id)}`);
+    setCurrent(id);
   }, [tracks]);
 
   const off = useCallback(() => { setUrl(null); setCurrent(null); }, []);

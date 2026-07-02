@@ -310,6 +310,61 @@ async function getSubtitleUrl({ fileId } = {}, { dataDir } = {}) {
   }
 }
 
+// ── SRT → WebVTT conversion + player VTT resolution ───────────────────────────
+// Browsers' <track> only parse WebVTT. SubDL/Wyzie serve SubRip (.srt), so the
+// web player needs an on-the-fly conversion served over HTTP (the download path
+// above keeps writing raw files to disk unchanged).
+function srtToVtt(text) {
+  let s = String(text)
+    .replace(/^﻿/, "") // strip BOM
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n");
+  if (/^\s*WEBVTT/.test(s)) return s.replace(/^\s+/, ""); // already VTT
+  // SRT timestamps use a comma before the milliseconds; VTT uses a dot.
+  s = s.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2");
+  return "WEBVTT\n\n" + s.trim() + "\n";
+}
+
+// args: { fileId } (a search-result file_id, subdl_* or wyzie_*)
+// Returns { ok, vtt } — WebVTT text ready for a browser <track>.
+async function getSubtitleVtt({ fileId } = {}) {
+  try {
+    let raw = null;
+    if (String(fileId).startsWith("subdl_")) {
+      const parts = String(fileId).split("_");
+      const subdlPath = decodeURIComponent(parts.slice(2).join("_"));
+      const res = await fetchWithTimeout(
+        `https://dl.subdl.com${subdlPath}`,
+        { headers: { "User-Agent": "Streambert" } },
+        30000,
+      );
+      if (!res.ok) return { ok: false, error: `SubDL download error ${res.status}` };
+      const extracted = extractFirstSubtitleFromZip(
+        Buffer.from(await res.arrayBuffer()),
+      );
+      if (!extracted) return { ok: false, error: "No subtitle file found in SubDL ZIP" };
+      const ext = extracted.name.toLowerCase().split(".").pop();
+      if (ext !== "srt" && ext !== "vtt")
+        return { ok: false, error: `Unsupported subtitle format: ${ext}` };
+      raw = extracted.data.toString("utf8");
+    } else if (String(fileId).startsWith("wyzie_")) {
+      const url = decodeURIComponent(String(fileId).split("_").slice(2).join("_"));
+      const res = await fetchWithTimeout(
+        url,
+        { headers: { "User-Agent": "Streambert" } },
+        30000,
+      );
+      if (!res.ok) return { ok: false, error: `Wyzie fetch error ${res.status}` };
+      raw = await res.text();
+    } else {
+      return { ok: false, error: "Unknown subtitle source" };
+    }
+    return { ok: true, vtt: srtToVtt(raw) };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
 // ── Download subtitles for an already-completed file ──────────────────────────
 // args: { filePath, selectedSubs }; opts: { store } where store =
 // { getDownloads, saveDownloads } (optional). Files are written alongside
@@ -451,6 +506,8 @@ module.exports = {
   extractSubtitleLang,
   searchSubtitles,
   getSubtitleUrl,
+  srtToVtt,
+  getSubtitleVtt,
   downloadSubtitlesForFile,
   deleteSubtitleFile,
   wyzieValidateKey,
