@@ -86,10 +86,24 @@ async function recommend({ history, fetchTmdb, limit = 20, now = Date.now() }) {
       else scored.set(key, { media_type: item.media_type, id: item.id, score: gain });
     });
   });
-  return [...scored.values()]
+  // Hybrid: the newest seed's top picks stay verbatim (its native TMDB order
+  // is the best next-watch predictor); consensus ranking orders only the rest
+  // of the row.
+  const HEAD_FROM_NEWEST = 8;
+  const head = [];
+  const headKeys = new Set();
+  for (const item of lists[0] || []) {
+    const key = titleKey(item.media_type, item.id);
+    if (watchedKeys.has(key) || headKeys.has(key)) continue;
+    headKeys.add(key);
+    head.push({ media_type: item.media_type, id: item.id });
+    if (head.length >= HEAD_FROM_NEWEST) break;
+  }
+  const rest = [...scored.values()]
+    .filter((i) => !headKeys.has(titleKey(i.media_type, i.id)))
     .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
     .map(({ media_type, id }) => ({ media_type, id }));
+  return [...head, ...rest].slice(0, limit);
 }
 
 module.exports = { recommend, titleKey };
