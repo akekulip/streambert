@@ -1011,6 +1011,10 @@ Replace the `<WebMediaPlayer .../>` block (lines ~974-980) with:
 
 In `src/pages/TVPage.jsx`: same default-source import/usage swap (lines ~32, 394, 670), and pass the same props to its `WebMediaPlayer`, plus `mediaType="tv"`, `season={selectedSeason}`, `episode={epNum}`, and the TV page's `progressKey` for the episode. Use that page's existing `playerWrapRef`, `saveProgress`, `watchedThreshold`, `storage`, and mark-watched ref (match the names already in TVPage — grep `playerWrapRef`, `saveProgress`, `onMarkWatched` there).
 
+- [ ] **Step 3a: Remove the redundant pagehide beacon from useProgressSaver**
+
+`onSaveProgress` is wired to `saveProgress` (from `src/utils/userState.js`), which **already** registers a global `window` `pagehide` listener that flushes queued progress to `/api/state/progress/beacon`. `useProgressSaver` (Task 8) posts its *own* `pagehide` beacon to the same endpoint — with both wired, one `pagehide` fires two beacons for the same key and a `sendBeacon` ordering race can let a staler `pct` overwrite a fresher one (small backward jump on resume). The throttled `timeupdate` saves already keep userState's queue fresh within ~5s, so the hook's own beacon is redundant. In `src/components/player/useProgressSaver.js`, delete the `onLeave` beacon function and its `window.addEventListener("pagehide", onLeave)` / `removeEventListener("pagehide", onLeave)` wiring (keep the `timeupdate` save path). Rebuild to confirm green.
+
 - [ ] **Step 4: Full build + test suite green**
 
 ```bash
