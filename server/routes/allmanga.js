@@ -4,8 +4,11 @@
 //
 // Contract (must match the window.electron shim in src/web/electron-shim.js):
 //   POST /resolve            -> lib.resolve(args)          (was ipc "resolve-allmanga")
-//   POST /debug              -> lib.debug(args)            (was ipc "debug-allmanga")
 //   POST /set-player-video   -> lib.setPlayerVideo(args)   (was ipc "set-player-video")
+//
+// Note: the POST /debug route (was ipc "debug-allmanga") has been removed —
+// it was a raw SSRF / response-reflection oracle (fetched any client-supplied
+// path/showId/title and echoed the response body back to the caller).
 //
 // Plus two support routes the returned playerUrl loads (same-origin, cookie-auth):
 //   GET  /player?src=&referer=&t=   -> self-contained <video>/hls.js player page
@@ -21,13 +24,6 @@ module.exports = async function (fastify) {
   fastify.post("/resolve", async (req) => {
     const args = req.body || {};
     return lib.resolve(args);
-  });
-
-  // ── debug-allmanga ────────────────────────────────────────────────────────
-  // Body: { path } | { showId, epNum? } | { title, season? }
-  fastify.post("/debug", async (req) => {
-    const args = req.body || {};
-    return lib.debug(args);
   });
 
   // ── set-player-video ──────────────────────────────────────────────────────
@@ -72,6 +68,8 @@ module.exports = async function (fastify) {
         .header("Access-Control-Allow-Origin", "*");
       return manifest;
     } catch (e) {
+      if (e.code === "BLOCKED_URL")
+        return reply.code(400).send({ error: "blocked url" });
       return reply.code(e.status || 502).send({ error: e.message || "hls fetch failed" });
     }
   });

@@ -14,6 +14,7 @@
 const https = require("https");
 const http = require("http");
 const crypto = require("crypto");
+const { assertPublicHttpUrl } = require("./safeUrl");
 // Reuse TCP+TLS across the multi-step AllManga/AniList resolve chain.
 const keepAliveHttps = new https.Agent({ keepAlive: true, maxSockets: 32 });
 
@@ -817,69 +818,6 @@ async function resolve({
   }
 }
 
-// ── Public: debug (was ipcMain.handle("debug-allmanga")) ──────────────────────
-
-async function debug(args) {
-  try {
-    if (args.path) {
-      const url = args.path.startsWith("http")
-        ? args.path
-        : "https://allmanga.to" + args.path;
-      const r = await httpsGet(url);
-      return { status: r.status, body: r.body.slice(0, 3000) };
-    }
-    if (args.showId) {
-      const vars = {
-        showId: args.showId,
-        translationType: "sub",
-        episodeString: String(args.epNum || 1),
-      };
-      const r = await allanimeGQLEpisode(vars);
-      let parsed;
-      try {
-        parsed = JSON.parse(r.body);
-      } catch {}
-      const decodedUrls = parseEpisodeSourceUrls(r.body);
-      if (decodedUrls?.length) {
-        parsed._decoded = decodedUrls
-          .filter((s) => s.sourceUrl?.startsWith("--"))
-          .map((s) => {
-            const p = decodeAllanimeUrl(s.sourceUrl).replace(
-              "/clock",
-              "/clock.json",
-            );
-            const fetchUrl = p.startsWith("//")
-              ? "https:" + p
-              : p.startsWith("/")
-                ? "https://allanime.day" + p
-                : p.startsWith("http")
-                  ? p
-                  : "https://allanime.day/" + p;
-            return { sourceName: s.sourceName, path: p, fetchUrl };
-          });
-      }
-      return { status: r.status, parsed, raw: r.body.slice(0, 2000) };
-    }
-    const season = args.season || 1;
-    const resolvedTitle = await anilistSeasonTitle(args.title || "", season);
-    const vars = {
-      search: {
-        allowAdult: true,
-        allowUnknown: false,
-        query: resolvedTitle.toLowerCase(),
-      },
-      limit: 10,
-      page: 1,
-      translationType: "sub",
-      countryOrigin: "ALL",
-    };
-    const r = await allanimeGQL(vars, SEARCH_GQL);
-    return { resolvedTitle, status: r.status, body: r.body.slice(0, 3000) };
-  } catch (e) {
-    return { error: e.message };
-  }
-}
-
 // ── Public: setPlayerVideo (was ipcMain.handle("set-player-video")) ───────────
 //
 // Desktop build spun up a 127.0.0.1 http server and returned an absolute
@@ -967,6 +905,7 @@ ${
 // and avoids needing to set the browser-forbidden Referer header client-side.
 
 async function fetchM3u8(url, referer) {
+  assertPublicHttpUrl(url);
   const r = await httpsGet(url, referer || DEFAULT_REFERER);
   if (r.status !== 200 || !r.body) {
     const err = new Error("upstream " + r.status);
@@ -1053,7 +992,6 @@ async function hlsManifest(url, referer) {
 module.exports = {
   // IPC-equivalent handlers
   resolve,
-  debug,
   setPlayerVideo,
   // player + hls helpers used by the route
   buildPlayerHtml,

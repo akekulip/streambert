@@ -18,6 +18,7 @@
 const https = require("https");
 const http = require("http");
 const { rewriteM3u8 } = require("../lib/m3u8");
+const { assertPublicHttpUrl } = require("../lib/safeUrl");
 
 // Reuse TCP+TLS connections across requests. HLS playback fetches many
 // segments/manifests from the same CDN through this proxy; without keep-alive
@@ -37,12 +38,10 @@ function requestUpstream(targetUrl, opts, hops = 0) {
     if (hops > MAX_REDIRECTS) return reject(new Error("too many redirects"));
     let u;
     try {
-      u = new URL(targetUrl);
-    } catch {
-      return reject(new Error("invalid url"));
+      u = assertPublicHttpUrl(targetUrl);
+    } catch (e) {
+      return reject(e);
     }
-    if (u.protocol !== "http:" && u.protocol !== "https:")
-      return reject(new Error("unsupported protocol"));
 
     const lib = u.protocol === "https:" ? https : http;
     const headers = {
@@ -73,6 +72,13 @@ function requestUpstream(targetUrl, opts, hops = 0) {
             ? res.headers.location
             : new URL(res.headers.location, targetUrl).href;
           res.resume();
+          // A public URL can 302 to an internal one — re-check before following.
+          try {
+            assertPublicHttpUrl(loc);
+          } catch (e) {
+            reject(e);
+            return;
+          }
           requestUpstream(loc, opts, hops + 1).then(resolve, reject);
           return;
         }
@@ -114,12 +120,10 @@ module.exports = async function (fastify) {
 
     let parsed;
     try {
-      parsed = new URL(url);
+      parsed = assertPublicHttpUrl(url);
     } catch {
-      return reply.code(400).send({ error: "invalid url" });
+      return reply.code(400).send({ error: "blocked url" });
     }
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
-      return reply.code(400).send({ error: "unsupported protocol" });
 
     let upstream;
     try {
@@ -130,6 +134,8 @@ module.exports = async function (fastify) {
         ua: ua || DEFAULT_UA,
       });
     } catch (e) {
+      if (e.code === "BLOCKED_URL")
+        return reply.code(400).send({ error: "blocked url" });
       return reply.code(502).send({ error: e.message || "proxy failed" });
     }
 
