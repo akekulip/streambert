@@ -26,9 +26,17 @@ const UA =
 const SHIM = `(function(){
   var M={"player.videasy.to":"/vzy/p","api.videasy.to":"/vzy/a","db.videasy.to":"/vzy/d","users.videasy.to":"/vzy/u"};
   function rw(u){try{if(typeof u!=="string")return u;
+    // Third-party stream/subtitle CDN (e.g. the decrypted .m3u8 host): the CDN
+    // only sends CORS for videasy's origin, so a same-origin browser fetch is
+    // blocked. Route it through our referer-spoofing proxy so it's same-origin.
+    if(/^https?:\\/\\//.test(u)){var uo=null;try{uo=new URL(u);}catch(e){}
+      if(uo&&uo.origin!==location.origin&&!/(^|\\.)videasy\\.to$/.test(uo.hostname)&&/\\.m3u8|\\.vtt|\\.ts|\\.mp4|\\.m4s|\\.key|type=hls|\\/video|\\/subtitle/i.test(u)){
+        return "/api/proxy?url="+encodeURIComponent(u)+"&referer="+encodeURIComponent("https://player.videasy.to/");
+      }
+    }
     for(var h in M){u=u.split("https://"+h).join(location.origin+M[h]).split("http://"+h).join(location.origin+M[h]).split("//"+h).join(M[h]);}
     // root-relative paths on this (proxied) page belong to the player -> /vzy/p
-    if(u.charAt(0)==="/"&&u.indexOf("/vzy/")!==0)u="/vzy/p"+u;
+    if(u.charAt(0)==="/"&&u.indexOf("/vzy/")!==0&&u.indexOf("/api/")!==0)u="/vzy/p"+u;
     return u;}catch(e){return u;}}
   var of=window.fetch;window.fetch=function(i,init){try{if(i&&typeof i==="object"&&i.url){i=new Request(rw(i.url),i);}else{i=rw(i);}}catch(e){}return of.call(this,i,init);};
   var xo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){try{arguments[1]=rw(u);}catch(e){}return xo.apply(this,arguments);};
