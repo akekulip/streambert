@@ -8,7 +8,7 @@ const { createExtractClient } = require("./lib/extract");
 const { createPrewarm } = require("./lib/prewarm");
 const { createCanary } = require("./lib/canary");
 
-const OPEN = ["/api/login", "/api/logout", "/api/events"];
+const OPEN = ["/api/login", "/api/logout", "/api/events", "/api/register", "/api/config"];
 
 function resolveUser(fastify, req) {
   const c = req.cookies && req.cookies.sb_session;

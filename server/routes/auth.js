@@ -1,5 +1,5 @@
 "use strict";
-const { getUserByUsername, verifyPassword } = require("../lib/users");
+const { getUserByUsername, verifyPassword, registerUser } = require("../lib/users");
 const { hashPassword } = require("../lib/passwords");
 
 // A fixed dummy credential so that an unknown username still incurs the full
@@ -41,6 +41,22 @@ module.exports = async function (fastify) {
     return { ok: true };
   });
 
+  fastify.post("/api/register", async (req, reply) => {
+    const { identifier, password } = req.body || {};
+    if (fastify.loginThrottle.isLocked(`register|${req.ip}`)) {
+      return reply.code(429).send({ error: "too many attempts, try again later" });
+    }
+    try {
+      registerUser(fastify.db, { identifier, password });
+      return { ok: true, status: "pending" };
+    } catch (e) {
+      fastify.loginThrottle.registerFailure(`register|${req.ip}`);
+      if (e.code === "DUP") return reply.code(409).send({ error: "that email or phone is already registered" });
+      if (e.code === "BADINPUT") return reply.code(400).send({ error: e.message });
+      throw e;
+    }
+  });
+
   fastify.post("/api/logout", async (_req, reply) => {
     reply.clearCookie("sb_session", { path: "/" });
     return { ok: true };
@@ -48,6 +64,6 @@ module.exports = async function (fastify) {
 
   fastify.get("/api/me", async (req, reply) => {
     if (!req.user) return reply.code(401).send({ error: "unauthorized" });
-    return { id: req.user.id, username: req.user.username, role: req.user.role };
+    return { id: req.user.id, username: req.user.username, role: req.user.role, status: req.user.status };
   });
 };

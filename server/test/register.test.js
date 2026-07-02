@@ -40,3 +40,34 @@ test("setUserStatus flips status; listUsers exposes it", () => {
   assert.equal(getUserByUsername(db, "c@d.com").status, "active");
   assert.ok(listUsers(db).every((r) => "status" in r));
 });
+
+const os = require("os");
+const { createLoginThrottle } = require("../lib/loginThrottle");
+const { buildApp } = require("../app");
+const { insertUser } = require("../lib/users");
+async function makeApp() {
+  const db = openDb(":memory:");
+  insertUser(db, { username: "admin", password: "adminpass", role: "admin" });
+  const app = await buildApp({ db, cookieSecret: "test-secret", loginThrottle: createLoginThrottle({ max: 50, lockoutMs: 1000 }), dataDir: os.tmpdir(), distDir: "/nonexistent" });
+  return { app, db };
+}
+test("POST /api/register creates a pending user (200) and rejects dup (409)", async () => {
+  const { app } = await makeApp();
+  const r = await app.inject({ method: "POST", url: "/api/register", payload: { identifier: "z@z.com", password: "password1" } });
+  assert.equal(r.statusCode, 200); assert.equal(r.json().status, "pending");
+  const dup = await app.inject({ method: "POST", url: "/api/register", payload: { identifier: "z@z.com", password: "password1" } });
+  assert.equal(dup.statusCode, 409);
+  const bad = await app.inject({ method: "POST", url: "/api/register", payload: { identifier: "nope", password: "password1" } });
+  assert.equal(bad.statusCode, 400);
+  await app.close();
+});
+test("GET /api/config returns contact links from env", async () => {
+  process.env.STREAMBERT_ADMIN_WHATSAPP = "+1 (555) 123-4567";
+  process.env.STREAMBERT_ADMIN_TELEGRAM = "@streambertadmin";
+  const { app } = await makeApp();
+  const c = await app.inject({ method: "GET", url: "/api/config" });
+  assert.equal(c.json().whatsapp, "https://wa.me/15551234567");
+  assert.equal(c.json().telegram, "https://t.me/streambertadmin");
+  delete process.env.STREAMBERT_ADMIN_WHATSAPP; delete process.env.STREAMBERT_ADMIN_TELEGRAM;
+  await app.close();
+});
