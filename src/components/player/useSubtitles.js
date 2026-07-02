@@ -31,7 +31,7 @@ export function useSubtitles({ active, tmdbId, mediaType, season, episode }) {
   const select = useCallback(async (id) => {
     const t = tracks.find((x) => x.id === id);
     if (!t) return;
-    const r = await window.electron.getSubtitleUrl(t.raw).catch(() => null);
+    const r = await window.electron.getSubtitleUrl({ fileId: t.id }).catch(() => null);
     if (r?.url) { setUrl(r.url); setCurrent(id); }
   }, [tracks]);
 
