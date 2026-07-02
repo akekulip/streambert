@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useVideoController } from "./player/useVideoController";
 import { useProgressSaver } from "./player/useProgressSaver";
 import { useSubtitles } from "./player/useSubtitles";
+import { useKeyboardShortcuts } from "./player/useKeyboardShortcuts";
 import VideoControls from "./player/VideoControls";
 
 // Browser player elements used only when window.__STREAMBERT_WEB__ is set.
@@ -122,6 +123,7 @@ export function WebMediaPlayer({ src, referer, startTime = 0, hidden, onReady, w
     wrapRef,
     onToggleCaptions: () => subs && (subs.current ? subs.off() : subs.tracks[0] && subs.select(subs.tracks[0].id)),
   });
+  useKeyboardShortcuts({ active: !hidden && !!src, actions });
   useProgressSaver({ videoRef, active: !hidden && !!src, progressKey, onSaveProgress, onMarkWatched, watchedThreshold, storage });
   const [controlsVisible, setControlsVisible] = useState(true);
   const hideTimer = useRef(null);
