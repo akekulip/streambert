@@ -75,6 +75,28 @@ export default function UsersAdminPanel() {
     }
   };
 
+  const activate = async (id) => {
+    try {
+      const res = await fetch(`/api/admin/users/${id}/activate`, { method: "POST", credentials: "include" });
+      if (res.ok) load();
+      else setMsg((await res.json().catch(() => ({}))).error || "Failed");
+    } catch {
+      setMsg("Request failed — is the server reachable?");
+    }
+  };
+
+  const suspend = async (id) => {
+    try {
+      const res = await fetch(`/api/admin/users/${id}/suspend`, { method: "POST", credentials: "include" });
+      if (res.ok) load();
+      else setMsg((await res.json().catch(() => ({}))).error || "Failed");
+    } catch {
+      setMsg("Request failed — is the server reachable?");
+    }
+  };
+
+  const pending = users.filter((u) => u.status === "pending");
+
   const purgeCaches = async () => {
     try {
       const res = await fetch("/api/admin/recs-cache/purge", { method: "POST", credentials: "include" });
@@ -102,6 +124,23 @@ export default function UsersAdminPanel() {
 
   return (
     <div>
+      {pending.length > 0 && (
+        <>
+          <h3>Pending approval ({pending.length})</h3>
+          <ul style={{ listStyle: "none", padding: 0 }}>
+            {pending.map((u) => (
+              <li key={u.id} style={{ padding: "4px 0" }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <span style={{ flex: 1 }}>{u.username}</span>
+                  <button className="btn btn-primary" onClick={() => activate(u.id)}>Activate</button>
+                  <button className="btn" onClick={() => removeUser(u.id)}>Reject</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
       <h3>Server</h3>
       {stats ? (
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", color: "var(--text2)", marginBottom: 12 }}>
@@ -142,10 +181,15 @@ export default function UsersAdminPanel() {
         {users.map((u) => (
           <li key={u.id} style={{ padding: "4px 0" }}>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <span style={{ flex: 1 }}>{u.username} <em style={{ color: "var(--text3)" }}>({u.role})</em></span>
+              <span style={{ flex: 1 }}>{u.username} <em style={{ color: "var(--text3)" }}>({u.role} · {u.status})</em></span>
               <button className="btn" onClick={() => toggleDetail(u.id)}>
                 {detail && detail.id === u.id ? "Hide" : "Details"}
               </button>
+              {u.status === "active" ? (
+                <button className="btn" onClick={() => suspend(u.id)}>Suspend</button>
+              ) : (
+                <button className="btn" onClick={() => activate(u.id)}>Activate</button>
+              )}
               <button className="btn" onClick={() => resetPass(u.id)}>Reset password</button>
               <button className="btn" onClick={() => removeUser(u.id)}>Delete</button>
             </div>
