@@ -129,44 +129,68 @@ export default function HomePage({
   }, [ratingsMap, ageLimitSetting]);
 
   // Personalised recommendations from several recent history items.
+  // Web builds get the server-side engine v2 (/api/recommendations, ranked
+  // from the user's full SQL history); anything that can't (desktop build,
+  // no TMDB token on the server, empty server history) falls back to the
+  // legacy client-side v1 logic below.
   useEffect(() => {
     if (!apiKey || offline || !history || history.length === 0) return;
-    const sources = getRecentHistoryItems(history, 5);
-    if (sources.length === 0) return;
-    setSimilarSource({ recommended: true }); // sentinel: multi-source row
-    // Exclude titles the user has already watched.
-    const watchedIds = new Set(
-      (history || []).map((h) => `${h.media_type || "movie"}_${h.id}`),
-    );
-    const fetchOne = (source) => {
-      const type = source.media_type === "tv" ? "tv" : "movie";
-      return tmdbFetch(`/${type}/${source.id}/recommendations`, apiKey)
-        .then((data) => {
-          const results = (data.results || []).map((i) => ({
-            ...i,
-            media_type: type,
-          }));
-          if (results.length > 0) return results;
-          // Fall back to /similar when /recommendations is empty.
-          return tmdbFetch(`/${type}/${source.id}/similar`, apiKey).then((d2) =>
-            (d2.results || []).map((i) => ({ ...i, media_type: type })),
-          );
+    let cancelled = false;
+
+    const legacy = () => {
+      const sources = getRecentHistoryItems(history, 5);
+      if (sources.length === 0) return;
+      // Exclude titles the user has already watched.
+      const watchedIds = new Set(
+        (history || []).map((h) => `${h.media_type || "movie"}_${h.id}`),
+      );
+      const fetchOne = (source) => {
+        const type = source.media_type === "tv" ? "tv" : "movie";
+        return tmdbFetch(`/${type}/${source.id}/recommendations`, apiKey)
+          .then((data) => {
+            const results = (data.results || []).map((i) => ({
+              ...i,
+              media_type: type,
+            }));
+            if (results.length > 0) return results;
+            // Fall back to /similar when /recommendations is empty.
+            return tmdbFetch(`/${type}/${source.id}/similar`, apiKey).then(
+              (d2) => (d2.results || []).map((i) => ({ ...i, media_type: type })),
+            );
+          })
+          .catch(() => []);
+      };
+      Promise.all(sources.map(fetchOne))
+        .then((lists) => {
+          if (cancelled) return;
+          const seen = new Set();
+          const deduped = [];
+          for (const item of lists.flat()) {
+            const key = `${item.media_type || "movie"}_${item.id}`;
+            if (seen.has(key) || watchedIds.has(key)) continue;
+            seen.add(key);
+            deduped.push(item);
+          }
+          setSimilarItems(deduped.slice(0, 20));
         })
-        .catch(() => []);
+        .catch(() => {});
     };
-    Promise.all(sources.map(fetchOne))
-      .then((lists) => {
-        const seen = new Set();
-        const deduped = [];
-        for (const item of lists.flat()) {
-          const key = `${item.media_type || "movie"}_${item.id}`;
-          if (seen.has(key) || watchedIds.has(key)) continue;
-          seen.add(key);
-          deduped.push(item);
-        }
-        setSimilarItems(deduped.slice(0, 20));
+
+    setSimilarSource({ recommended: true }); // sentinel: multi-source row
+    fetch("/api/recommendations", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
+      .then((data) => {
+        if (cancelled) return;
+        const results = data.results || [];
+        if (results.length === 0) return legacy();
+        setSimilarItems(results.slice(0, 20));
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) legacy();
+      });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiKey, offline, history?.length]);
 

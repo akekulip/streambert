@@ -1,0 +1,8 @@
+{
+  "seed": 20260701,
+  "n_users": 40,
+  "fixed_now": 1782820800000,
+  "unique_titles": 628,
+  "cached_paths": 1920,
+  "api_calls": 1920
+}
