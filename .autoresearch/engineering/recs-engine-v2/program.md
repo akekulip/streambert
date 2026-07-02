@@ -55,3 +55,24 @@ history under the old metric:
   outside every seed's rec/similar lists) — only global trending/popular or
   genre-discover data can reach them; exploration must not displace strong
   personalized picks.
+
+**Session 2026-07-02 (runs 5-9, metric v2):**
+
+| run | row_score | status  | change |
+|-----|-----------|---------|--------|
+| 5   | 0.8533    | keep    | re-baseline: consensus-weighted (metric v2) |
+| 6   | 0.8800    | keep    | hybrid: newest-seed top-8 verbatim + consensus tail |
+| 7   | 0.8750    | discard | gap-aware exploration (2 slots, type-deficit boost) |
+| 8   | 0.8800    | discard | conditional type-gap exploration (tie) |
+
+- Hybrid ranking is the winner: hit@20 0.8833 / hit@10 0.8750 (v1 baseline
+  was 0.8750 / 0.8667).
+- Exploration slots failed 3 ways (unconditional, boosted, conditional): on
+  synthetic data taste-jumps are uniform draws from discover pages, so
+  trending/popular slots catch ~1 while displacing ~1-2 tail hits. DO NOT
+  retry exploration against synthetic-only fixtures.
+- Synthetic ceiling reached: the remaining 14/120 misses are outside every
+  recommendation/similar list of every prefix title (verified exhaustively).
+  Only real-user data changes this picture — real taste-jumps follow actual
+  trending popularity, so exploration should be re-tested once
+  fixtures/real/histories.json is populated (node eval/recs/harvest_real.mjs).
