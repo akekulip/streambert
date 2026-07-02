@@ -11,12 +11,13 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import KeyboardShortcutsModal from "./components/KeyboardShortcutsModal";
 import WindowTitlebar from "./components/WindowTitlebar";
 import LoginGate from "./components/LoginGate";
+import PendingScreen from "./components/PendingScreen";
 import { storage, secureStorage, STORAGE_KEYS } from "./utils/storage";
 import { applyAccentColor } from "./utils/appearance";
 import { collectBackupData } from "./utils/backup";
 import { tmdbFetch, setApiErrorHandlers } from "./utils/api";
 import { clearAppCaches } from "./utils/storage";
-import { getMe } from "./utils/session";
+import { getMe, logout } from "./utils/session";
 import * as userState from "./utils/userState";
 
 import Sidebar from "./components/Sidebar";
@@ -887,6 +888,21 @@ export default function App() {
   if (authGate === "checking") return null;
   if (authGate === "required")
     return <LoginGate onSuccess={() => window.location.reload()} />;
+
+  // Logged in, but not yet approved (or suspended) by an admin: show the
+  // pending screen instead of the main app. Old sessions where `me.status`
+  // wasn't returned yet (or is "active") fall through to the app normally.
+  if (me && (me.status === "pending" || me.status === "disabled")) {
+    return (
+      <PendingScreen
+        status={me.status}
+        onLogout={async () => {
+          await logout();
+          window.location.reload();
+        }}
+      />
+    );
+  }
 
   if (!apiKeyLoaded) return null; // wait for secure storage to resolve
   if (!apiKey && !skipped)
