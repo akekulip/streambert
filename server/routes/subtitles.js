@@ -97,10 +97,10 @@ module.exports = async function (fastify) {
   });
 
   fastify.post("/download", async (req) =>
-    subs.downloadSubtitlesForFile(req.body || {}, { store }),
+    subs.downloadSubtitlesForFile(req.body || {}, { store, dataDir }),
   );
 
   fastify.post("/delete", async (req) =>
-    subs.deleteSubtitleFile(req.body || {}, { store }),
+    subs.deleteSubtitleFile(req.body || {}, { store, dataDir }),
   );
 };

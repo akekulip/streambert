@@ -13,6 +13,7 @@ const path = require("path");
 const fs = require("fs");
 const zlib = require("zlib");
 const { safeFetch } = require("./safeUrl");
+const { isPathInside } = require("./downloads");
 
 // Resolves a SubDL-relative download path to an absolute dl.subdl.com URL,
 // rejecting anything that doesn't resolve to that exact host (defends against
@@ -34,6 +35,14 @@ function fetchWithTimeout(url, options = {}, ms = 15000) {
   return fetch(url, { ...options, signal: controller.signal }).finally(() =>
     clearTimeout(timer),
   );
+}
+
+// Defends against zip-slip: a malicious ZIP entry name like "../../evil.srt"
+// (or an absolute path) must never be allowed to escape the directory it's
+// extracted into. Collapse to the bare filename only.
+function sanitizeZipEntryName(name) {
+  const normalized = String(name || "").replace(/\\/g, "/");
+  return path.basename(normalized) || "subtitle";
 }
 
 // ── ZIP subtitle extractor ────────────────────────────────────────────────────
@@ -74,7 +83,7 @@ function extractFirstSubtitleFromZip(buf) {
           offset = dataOffset + compressedSize;
           continue;
         }
-        return { data, name: fileName };
+        return { data, name: sanitizeZipEntryName(fileName) };
       }
       offset = dataOffset + compressedSize;
     } else {
@@ -380,15 +389,25 @@ async function getSubtitleVtt({ fileId } = {}) {
 }
 
 // ── Download subtitles for an already-completed file ──────────────────────────
-// args: { filePath, selectedSubs }; opts: { store } where store =
+// args: { filePath, selectedSubs }; opts: { store, dataDir } where store =
 // { getDownloads, saveDownloads } (optional). Files are written alongside
-// filePath, matching the Electron behavior.
+// filePath, matching the Electron behavior — but only when filePath resolves
+// inside <dataDir>/downloads (server-owned download directory); otherwise this
+// is a client-controlled arbitrary-directory write and must be rejected.
 async function downloadSubtitlesForFile(
   { filePath, selectedSubs } = {},
-  { store } = {},
+  { store, dataDir } = {},
 ) {
   try {
+    if (!filePath) return { ok: false, error: "filePath required" };
     const dir = path.dirname(filePath);
+    const downloadsDir = dataDir ? path.join(dataDir, "downloads") : null;
+    if (!downloadsDir || !isPathInside(dir, downloadsDir)) {
+      return {
+        ok: false,
+        error: "filePath is outside the allowed downloads directory",
+      };
+    }
     const baseName = path.basename(filePath, path.extname(filePath));
     const results = [];
     const langCounter = {};
@@ -438,6 +457,7 @@ async function downloadSubtitlesForFile(
           dir,
           `${baseName}.${langCode}${suffix}.${ext}`,
         );
+        if (!isPathInside(destPath, downloadsDir)) continue;
         fs.writeFileSync(destPath, fileData);
         results.push({
           lang: langCode,
@@ -477,10 +497,29 @@ async function downloadSubtitlesForFile(
 }
 
 // ── Delete a single subtitle file ─────────────────────────────────────────────
-// args: { downloadId, subtitlePath }; opts: { store } (optional).
-function deleteSubtitleFile({ downloadId, subtitlePath } = {}, { store } = {}) {
+// args: { downloadId, subtitlePath }; opts: { store, dataDir } (dataDir
+// required to unlink — without it, a subtitlePath is never trusted). Only
+// paths inside <dataDir>/subtitles (SubDL ZIP extraction) or
+// <dataDir>/downloads (subtitles written alongside a downloaded file) may be
+// removed; anything else is rejected instead of unlinked.
+function deleteSubtitleFile(
+  { downloadId, subtitlePath } = {},
+  { store, dataDir } = {},
+) {
   try {
-    if (subtitlePath && fs.existsSync(subtitlePath)) fs.unlinkSync(subtitlePath);
+    if (subtitlePath) {
+      const subtitlesDir = dataDir ? path.join(dataDir, "subtitles") : null;
+      const downloadsDir = dataDir ? path.join(dataDir, "downloads") : null;
+      const allowed =
+        subtitlesDir &&
+        downloadsDir &&
+        (isPathInside(subtitlePath, subtitlesDir) ||
+          isPathInside(subtitlePath, downloadsDir));
+      if (!allowed) {
+        throw new Error("subtitlePath is outside the allowed directory");
+      }
+      if (fs.existsSync(subtitlePath)) fs.unlinkSync(subtitlePath);
+    }
     if (downloadId && store) {
       const downloads = store.getDownloads();
       const idx = downloads.findIndex((d) => d.id === downloadId);

@@ -951,4 +951,4 @@ function createDownloadManager({ dataDir, downloaderPath, broadcast }) {
   };
 }
 
-module.exports = { createDownloadManager };
+module.exports = { createDownloadManager, isPathInside };
