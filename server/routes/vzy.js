@@ -49,6 +49,15 @@ function rewriteText(text, isHtml) {
     .replace(/(["'(=,`])\/scripts\//g, "$1/vzy/p/scripts/")
     .replace(/(["'(=,`])\/favicon\.ico/g, "$1/vzy/p/favicon.ico")
     .replace(/(["'(=,`])\/cdn-cgi\//g, "$1/vzy/p/cdn-cgi/");
+  // Neutralize Videasy's anti-embed guard: when it detects it's in an iframe
+  // (self !== top) it wipes its own player and shows a "don't embed" overlay.
+  // We patch the comparison to a constant false so it never triggers — only
+  // possible because the proxy serves the JS same-origin.
+  text = text
+    .split("window.self!==window.top").join("(!1)")
+    .split("window.self !== window.top").join("(!1)")
+    .split("window.top!==window.self").join("(!1)")
+    .split("self!==window.top").join("(!1)");
   return text;
 }
 
