@@ -30,18 +30,9 @@ export function useProgressSaver({ videoRef, active, progressKey, onSaveProgress
       lastAt.current = now;
       persist();
     };
-    const onLeave = () => {
-      const { currentTime: ct, duration: dur } = v;
-      if (dur > 0 && navigator.sendBeacon) {
-        navigator.sendBeacon("/api/state/progress/beacon",
-          JSON.stringify({ key: progressKey, pct: toPct(ct, dur) }));
-      }
-    };
     v.addEventListener("timeupdate", onTime);
-    window.addEventListener("pagehide", onLeave);
     return () => {
       v.removeEventListener("timeupdate", onTime);
-      window.removeEventListener("pagehide", onLeave);
     };
   }, [videoRef, active, progressKey, onSaveProgress, onMarkWatched, watchedThreshold, storage]);
 }
