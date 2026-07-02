@@ -19,6 +19,11 @@ function createRecsCache() {
     store(userId, newest, results) {
       cache.set(userId, { at: Date.now(), newest, results });
     },
+    // Staleness-tolerant read for the pre-warmer (a slightly old row is fine).
+    peek(userId) {
+      const hit = cache.get(userId);
+      return hit ? hit.results : null;
+    },
     stats: () => ({ users: cache.size }),
     clear: () => cache.clear(),
   };

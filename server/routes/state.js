@@ -32,7 +32,11 @@ module.exports = async function (fastify) {
     throw e;
   };
 
-  fastify.get("/bootstrap", async (req) => us.getBootstrap(fastify.db, req.user.id));
+  fastify.get("/bootstrap", async (req) => {
+    const out = us.getBootstrap(fastify.db, req.user.id);
+    fastify.prewarm.schedule(req.user.id); // fire-and-forget stream pre-warm
+    return out;
+  });
 
   fastify.put("/progress/:key", async (req, reply) => {
     const pct = Number((req.body || {}).pct);

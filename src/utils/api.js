@@ -41,6 +41,13 @@ function _releaseSlot() {
   }
 }
 
+// Web builds route through the server's cached TMDB proxy (/api/tmdb):
+// shared cache across users at LAN latency. 404/401 from the proxy means
+// "no proxy here" (desktop build, old server, or logged out) — latch direct
+// mode for the rest of the session. Transient proxy errors fall back to a
+// direct call without latching.
+let _useProxy = true;
+
 export const tmdbFetch = async (path, apiKey, options = {}) => {
   const { signal } = options;
   const cacheKey = `${apiKey}|${path}`;
@@ -49,31 +56,46 @@ export const tmdbFetch = async (path, apiKey, options = {}) => {
 
   await _acquireSlot();
 
-  let res;
-  try {
-    res = await fetch(`${TMDB_BASE}${path}`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-      signal,
-    });
-  } catch {
+  let res = null;
+  if (_useProxy) {
+    try {
+      const pr = await fetch(`/api/tmdb${path}`, { signal, credentials: "include" });
+      if (pr.ok) res = pr;
+      else if (pr.status === 404 || pr.status === 401) _useProxy = false;
+    } catch (e) {
+      if (e.name === "AbortError") {
+        _releaseSlot();
+        throw e;
+      }
+      _useProxy = false;
+    }
+  }
+
+  if (!res) {
+    try {
+      res = await fetch(`${TMDB_BASE}${path}`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal,
+      });
+    } catch {
+      _releaseSlot();
+      _onUnreachable?.();
+      throw new Error("TMDB unreachable");
+    }
+
     _releaseSlot();
-    _onUnreachable?.();
-    throw new Error("TMDB unreachable");
-  } finally {
-    // releaseSlot is called in the catch above for network errors;
-    // for successful responses it is called immediately below, before
-    // parsing, so the slot is held only during the actual in-flight
-    // request, not during res.json().
+
+    if (res.status === 401 || res.status === 403) {
+      _onAuthError?.();
+      throw new Error(`TMDB ${res.status}`);
+    }
+
+    if (!res.ok) throw new Error(`TMDB ${res.status}`);
+  } else {
+    // Slot held only during the in-flight request, not during res.json().
+    _releaseSlot();
   }
 
-  _releaseSlot();
-
-  if (res.status === 401 || res.status === 403) {
-    _onAuthError?.();
-    throw new Error(`TMDB ${res.status}`);
-  }
-
-  if (!res.ok) throw new Error(`TMDB ${res.status}`);
   const data = await res.json();
   _tmdbCache.set(cacheKey, { data, expiresAt: Date.now() + TMDB_CACHE_TTL });
 

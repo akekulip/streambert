@@ -39,6 +39,8 @@ module.exports = async function (fastify) {
         ...fastify.recsCache.stats(),
         tmdb: fastify.tmdbFetch && fastify.tmdbFetch.stats ? fastify.tmdbFetch.stats() : null,
       },
+      streams: fastify.extractClient ? fastify.extractClient.stats() : null,
+      prewarm: fastify.prewarm ? fastify.prewarm.stats() : null,
     };
   });
 

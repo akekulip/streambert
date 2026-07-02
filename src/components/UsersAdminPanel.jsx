@@ -115,6 +115,21 @@ export default function UsersAdminPanel() {
             recs cache: {stats.recsCache.users} users
             {stats.recsCache.tmdb ? `, ${stats.recsCache.tmdb.entries} TMDB paths` : ""}
           </span>
+          {stats.recsCache.tmdb && (
+            <span>
+              TMDB hits: {stats.recsCache.tmdb.hits ?? 0}/
+              {(stats.recsCache.tmdb.hits ?? 0) + (stats.recsCache.tmdb.misses ?? 0)}
+            </span>
+          )}
+          {stats.streams && (
+            <span>streams cached: {stats.streams.entries}</span>
+          )}
+          {stats.prewarm && (
+            <span>
+              pre-warmed: {stats.prewarm.warmed}
+              {stats.prewarm.errors ? ` (${stats.prewarm.errors} failed)` : ""}
+            </span>
+          )}
           <button className="btn" onClick={purgeCaches}>Purge caches</button>
         </div>
       ) : (

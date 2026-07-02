@@ -4,6 +4,8 @@ const fs = require("fs");
 const { getUserById } = require("./lib/users");
 const { createTmdb } = require("./lib/tmdb");
 const { createRecsCache } = require("./lib/recsCache");
+const { createExtractClient } = require("./lib/extract");
+const { createPrewarm } = require("./lib/prewarm");
 
 const OPEN = ["/api/login", "/api/logout", "/api/events"];
 
@@ -16,7 +18,7 @@ function resolveUser(fastify, req) {
   return user ? { id: user.id, username: user.username, role: user.role } : null;
 }
 
-async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir, tmdbFetch }) {
+async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir, tmdbFetch, extractClient, prewarm }) {
   // trustProxy: behind Caddy, use the X-Forwarded-For client IP (not the
   // proxy's) so the login throttle keys on the real client and X-Forwarded-Proto
   // is honored for the secure-cookie decision.
@@ -37,10 +39,23 @@ async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir, tmd
   fastify.decorate("config", { DATA_DIR: dataDir });
   fastify.decorate("sessionValid", (req) => !!resolveUser(fastify, req));
   fastify.decorate("resolveUser", (req) => resolveUser(fastify, req));
-  // Root-scoped so both /api/recommendations and the admin routes see them
-  // (tmdbFetch is injectable for tests; undefined → real fetcher).
+  // Root-scoped so routes and admin all see them (tmdbFetch/extractClient/
+  // prewarm are injectable for tests; undefined → real implementations).
   fastify.decorate("tmdbFetch", tmdbFetch !== undefined ? tmdbFetch : createTmdb({ dataDir }));
   fastify.decorate("recsCache", createRecsCache());
+  fastify.decorate("extractClient", extractClient !== undefined ? extractClient : createExtractClient());
+  fastify.decorate(
+    "prewarm",
+    prewarm !== undefined
+      ? prewarm
+      : createPrewarm({
+          db,
+          extractClient: fastify.extractClient,
+          recsCache: fastify.recsCache,
+          fetchTmdb: fastify.tmdbFetch,
+          log: fastify.log,
+        }),
+  );
 
   // Resolve the logged-in user for every /api/* request; gate non-open paths.
   fastify.addHook("preHandler", async (req, reply) => {
@@ -64,6 +79,7 @@ async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir, tmd
   await tryRegister("./routes/secure", { prefix: "/api/secure" });
   await tryRegister("./routes/state", { prefix: "/api/state" });
   await tryRegister("./routes/recommendations", { prefix: "/api/recommendations" });
+  await tryRegister("./routes/tmdb", { prefix: "/api/tmdb" });
   await tryRegister("./routes/meta", { prefix: "/api" });
   await tryRegister("./routes/allmanga", { prefix: "/api/allmanga" });
   await tryRegister("./routes/downloads", { prefix: "/api/downloads" });
