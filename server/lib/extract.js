@@ -13,12 +13,16 @@ function createExtractClient() {
   let hits = 0;
   let misses = 0;
 
-  async function extract(job) {
+  // opts.fresh bypasses the cache read (the health canary must test a real
+  // extraction, not a cache hit); the fresh result still refreshes the cache.
+  async function extract(job, { fresh = false } = {}) {
     const key = jobKey(job);
-    const hit = cache.get(key);
-    if (hit) {
-      hits++;
-      return { ok: true, cached: true, url: hit.url, referer: hit.referer };
+    if (!fresh) {
+      const hit = cache.get(key);
+      if (hit) {
+        hits++;
+        return { ok: true, cached: true, url: hit.url, referer: hit.referer };
+      }
     }
     misses++;
     const base =

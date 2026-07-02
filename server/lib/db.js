@@ -55,7 +55,27 @@ function migrate(db) {
       updated_at INTEGER NOT NULL,
       PRIMARY KEY (user_id, key)
     );
+    CREATE TABLE IF NOT EXISTS watch_events (
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      media_type TEXT    NOT NULL CHECK (media_type IN ('movie','tv')),
+      tmdb_id    INTEGER NOT NULL,
+      season     INTEGER,
+      episode    INTEGER,
+      watched_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_watch_events_time ON watch_events (watched_at);
+    CREATE INDEX IF NOT EXISTS idx_watch_events_user ON watch_events (user_id, watched_at);
   `);
+
+  // history is an upsert-per-title snapshot; watch_events (analytics) is the
+  // append-only log. One-time seed so dashboards aren't empty on upgrade.
+  const hasEvents = db.prepare("SELECT 1 FROM watch_events LIMIT 1").get();
+  if (!hasEvents) {
+    db.exec(`
+      INSERT INTO watch_events (user_id, media_type, tmdb_id, season, episode, watched_at)
+      SELECT user_id, media_type, tmdb_id, season, episode, watched_at FROM history
+    `);
+  }
 }
 
 function openDb(dbPath) {

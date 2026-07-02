@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const { createUser, listUsers, resetPassword, deleteUser } = require("../lib/users");
 const { recommend } = require("../lib/recommendations");
+const { getAnalytics } = require("../lib/analytics");
 
 module.exports = async function (fastify) {
   fastify.addHook("preHandler", async (req, reply) => {
@@ -80,6 +81,18 @@ module.exports = async function (fastify) {
       })),
     };
   });
+
+  fastify.get("/api/admin/analytics", async (req) => {
+    const days = Math.min(90, Math.max(7, Number(req.query.days) || 30));
+    return getAnalytics(fastify.db, { days });
+  });
+
+  fastify.get("/api/admin/health", async () => ({
+    canary: fastify.canary ? fastify.canary.status() : null,
+    streams: fastify.extractClient ? fastify.extractClient.stats() : null,
+  }));
+
+  fastify.post("/api/admin/health/canary", async () => fastify.canary.run());
 
   fastify.post("/api/admin/recs-cache/purge", async () => {
     fastify.recsCache.clear();

@@ -104,10 +104,19 @@ function addHistory(db, userId, entry) {
        SELECT rowid FROM history WHERE user_id = ? ORDER BY watched_at DESC LIMIT -1 OFFSET ?
      )`,
   ).run(userId, HISTORY_CAP);
+  // Append-only analytics log (history above is an upsert-per-title snapshot).
+  db.prepare(
+    "INSERT INTO watch_events (user_id, media_type, tmdb_id, season, episode, watched_at) VALUES (?,?,?,?,?,?)",
+  ).run(
+    userId, media_type, tmdb_id,
+    entry.season ?? null, entry.episode ?? null,
+    Number(entry.watchedAt) || Date.now(),
+  );
 }
 
 function clearHistory(db, userId) {
   db.prepare("DELETE FROM history WHERE user_id = ?").run(userId);
+  db.prepare("DELETE FROM watch_events WHERE user_id = ?").run(userId);
 }
 
 function nextLibraryPosition(db, userId) {

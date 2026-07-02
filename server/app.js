@@ -6,6 +6,7 @@ const { createTmdb } = require("./lib/tmdb");
 const { createRecsCache } = require("./lib/recsCache");
 const { createExtractClient } = require("./lib/extract");
 const { createPrewarm } = require("./lib/prewarm");
+const { createCanary } = require("./lib/canary");
 
 const OPEN = ["/api/login", "/api/logout", "/api/events"];
 
@@ -18,7 +19,7 @@ function resolveUser(fastify, req) {
   return user ? { id: user.id, username: user.username, role: user.role } : null;
 }
 
-async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir, tmdbFetch, extractClient, prewarm }) {
+async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir, tmdbFetch, extractClient, prewarm, canary }) {
   // trustProxy: behind Caddy, use the X-Forwarded-For client IP (not the
   // proxy's) so the login throttle keys on the real client and X-Forwarded-Proto
   // is honored for the secure-cookie decision.
@@ -55,6 +56,13 @@ async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir, tmd
           fetchTmdb: fastify.tmdbFetch,
           log: fastify.log,
         }),
+  );
+  // Created here but started in index.js after listen — tests never tick it.
+  fastify.decorate(
+    "canary",
+    canary !== undefined
+      ? canary
+      : createCanary({ extractClient: fastify.extractClient, log: fastify.log }),
   );
 
   // Resolve the logged-in user for every /api/* request; gate non-open paths.

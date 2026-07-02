@@ -55,6 +55,7 @@ async function main() {
     dataDir: DATA_DIR, distDir: DIST_DIR,
   });
   await app.listen({ port: PORT, host: "0.0.0.0" });
+  app.canary.start(); // hourly extraction health check (STREAMBERT_CANARY=0 disables)
   app.log.info(`Streambert web on :${PORT}`);
 }
 

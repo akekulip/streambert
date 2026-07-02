@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import UpdateModal from "../components/UpdateModal";
 import UsersAdminPanel from "../components/UsersAdminPanel";
+import AdminDashboard from "../components/AdminDashboard";
 import { logout } from "../utils/session";
 import {
   storage,
@@ -3856,9 +3857,10 @@ export default function SettingsPage({
           <div style={{ scrollMarginTop: 80 }}>
             <SectionGroupHeader
               title="Admin"
-              subtitle="Manage user accounts for this Streambert instance"
+              subtitle="Household analytics, server health, and user accounts"
             />
             <div style={{ marginBottom: 40 }}>
+              <AdminDashboard />
               <UsersAdminPanel />
             </div>
           </div>
