@@ -42,18 +42,19 @@ module.exports = async function (fastify) {
   });
 
   fastify.post("/api/register", async (req, reply) => {
-    const { identifier, password } = req.body || {};
-    if (fastify.loginThrottle.isLocked(`register|${req.ip}`)) {
+    const key = `register|${req.ip}`;
+    if (fastify.loginThrottle.isLocked(key)) {
       return reply.code(429).send({ error: "too many attempts, try again later" });
     }
+    const { identifier, password } = req.body || {};
     try {
       registerUser(fastify.db, { identifier, password });
+      fastify.loginThrottle.registerFailure(key); // count every attempt toward the per-IP cap
       return { ok: true, status: "pending" };
     } catch (e) {
-      fastify.loginThrottle.registerFailure(`register|${req.ip}`);
-      if (e.code === "DUP") return reply.code(409).send({ error: "that email or phone is already registered" });
-      if (e.code === "BADINPUT") return reply.code(400).send({ error: e.message });
-      throw e;
+      if (e.code === "DUP") { fastify.loginThrottle.registerFailure(key); return reply.code(409).send({ error: "that email or phone is already registered" }); }
+      if (e.code === "BADINPUT") { fastify.loginThrottle.registerFailure(key); return reply.code(400).send({ error: e.message }); }
+      throw e; // genuine server error — do not count toward lockout
     }
   });
 

@@ -109,3 +109,21 @@ test("gate uses exact path match: pending user's /api/me?x=1 is allowed, content
   assert.equal(content.statusCode, 403);
   await app.close();
 });
+
+test("register is rate-limited per IP (429 after the cap)", async () => {
+  const db = openDb(":memory:");
+  insertUser(db, { username: "admin", password: "adminpass", role: "admin" });
+  const app = await buildApp({ db, cookieSecret: "s", loginThrottle: createLoginThrottle({ max: 2, lockoutMs: 60000 }), dataDir: os.tmpdir(), distDir: "/nonexistent" });
+  const r1 = await app.inject({ method: "POST", url: "/api/register", payload: { identifier: "r1@x.com", password: "password1" } });
+  const r2 = await app.inject({ method: "POST", url: "/api/register", payload: { identifier: "r2@x.com", password: "password1" } });
+  const r3 = await app.inject({ method: "POST", url: "/api/register", payload: { identifier: "r3@x.com", password: "password1" } });
+  assert.equal(r1.statusCode, 200); assert.equal(r2.statusCode, 200); assert.equal(r3.statusCode, 429);
+  await app.close();
+});
+
+test("setUserStatus refuses to suspend the last admin", () => {
+  const db = openDb(":memory:");
+  const admin = insertUser(db, { username: "admin", password: "adminpass", role: "admin" });
+  assert.throws(() => setUserStatus(db, admin.id, "disabled"), (e) => e.code === "LAST_ADMIN");
+  assert.equal(db.prepare("SELECT status FROM users WHERE id=?").get(admin.id).status, "active");
+});

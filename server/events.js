@@ -33,7 +33,7 @@ module.exports = function (fastify) {
   fastify.get("/api/events", { websocket: true }, (socket, request) => {
     // @fastify/websocket v10: socket is the ws. Auth via session cookie.
     const user = fastify.resolveUser(request);
-    if (!user) {
+    if (!user || user.status !== "active") {
       try {
         socket.close();
       } catch {}
