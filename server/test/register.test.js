@@ -72,3 +72,30 @@ test("GET /api/config returns contact links from env", async () => {
   delete process.env.STREAMBERT_ADMIN_WHATSAPP; delete process.env.STREAMBERT_ADMIN_TELEGRAM;
   await app.close();
 });
+
+async function loginCookie(app, username, password) {
+  const r = await app.inject({ method: "POST", url: "/api/login", payload: { username, password } });
+  return r.cookies.find((c) => c.name === "sb_session").value;
+}
+test("pending user: /api/me OK but content is 403; active user OK", async () => {
+  const { app, db } = await makeApp();
+  await app.inject({ method: "POST", url: "/api/register", payload: { identifier: "pend@x.com", password: "password1" } });
+  const cookie = await loginCookie(app, "pend@x.com", "password1");
+  const me = await app.inject({ method: "GET", url: "/api/me", cookies: { sb_session: cookie } });
+  assert.equal(me.statusCode, 200); assert.equal(me.json().status, "pending");
+  const content = await app.inject({ method: "GET", url: "/api/state/bootstrap", cookies: { sb_session: cookie } });
+  assert.equal(content.statusCode, 403);
+  const vzy = await app.inject({ method: "GET", url: "/vzy/p/movie/550", cookies: { sb_session: cookie } });
+  assert.equal(vzy.statusCode, 403);
+  // admin (active) can hit content
+  const acookie = await loginCookie(app, "admin", "adminpass");
+  const ok = await app.inject({ method: "GET", url: "/api/state/bootstrap", cookies: { sb_session: acookie } });
+  assert.equal(ok.statusCode, 200);
+  await app.close();
+});
+test("/vzy requires a session (401 anon)", async () => {
+  const { app } = await makeApp();
+  const r = await app.inject({ method: "GET", url: "/vzy/p/movie/550" });
+  assert.equal(r.statusCode, 401);
+  await app.close();
+});

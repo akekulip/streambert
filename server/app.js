@@ -16,7 +16,7 @@ function resolveUser(fastify, req) {
   const u = fastify.unsignCookie(c);
   if (!u.valid || !u.value) return null;
   const user = getUserById(fastify.db, Number(u.value));
-  return user ? { id: user.id, username: user.username, role: user.role } : null;
+  return user ? { id: user.id, username: user.username, role: user.role, status: user.status } : null;
 }
 
 async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir, tmdbFetch, extractClient, prewarm, canary }) {
@@ -65,12 +65,19 @@ async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir, tmd
       : createCanary({ extractClient: fastify.extractClient, log: fastify.log }),
   );
 
-  // Resolve the logged-in user for every /api/* request; gate non-open paths.
+  // Resolve the logged-in user for every /api/* and /vzy request; gate
+  // non-open paths and 403 non-active accounts off everything but /api/me.
   fastify.addHook("preHandler", async (req, reply) => {
-    if (!req.url.startsWith("/api/")) return;
+    const isApi = req.url.startsWith("/api/");
+    const isVzy = req.url.startsWith("/vzy");
+    if (!isApi && !isVzy) return;
     req.user = resolveUser(fastify, req);
-    if (OPEN.some((p) => req.url.startsWith(p))) return;
+    if (isApi && OPEN.some((p) => req.url.startsWith(p))) return;
     if (!req.user) return reply.code(401).send({ error: "unauthorized" });
+    // Pending/suspended accounts may reach only /api/me (+ /api/logout via OPEN).
+    if (req.user.status !== "active" && !req.url.startsWith("/api/me")) {
+      return reply.code(403).send({ error: "account not active", status: req.user.status });
+    }
   });
 
   require("./events")(fastify);
