@@ -4,7 +4,7 @@ import { toPct, shouldSave, isWatched } from "./progress.mjs";
 
 test("toPct floors and caps at 100", () => {
   assert.equal(toPct(30, 120), 25);
-  assert.equal(toPct(121, 120), 100);
+  assert.equal(toPct(200, 120), 100); // 166 uncapped -> exercises the Math.min cap
   assert.equal(toPct(10, 0), 0);
 });
 test("shouldSave respects interval and first-save", () => {
