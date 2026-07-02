@@ -1,5 +1,6 @@
-// Web-only: vidsrc-direct is server-extracted and has no desktop resolver, so
-// it can only be the default in the web build.
+// Web default is Videasy (preferred: quality, own controls, fullscreen). The
+// server-extracted vidsrc-direct player stays selectable but is not the default.
+// Desktop has no vidsrc-direct resolver, so it defaults to the plain vidsrc embed.
 export function defaultNonAnimeSource(isWeb) {
-  return isWeb ? "vidsrc-direct" : "vidsrc";
+  return isWeb ? "videasy" : "vidsrc";
 }
