@@ -29,3 +29,29 @@ Removing code that gets same results is the best outcome.
 ## Stop When
 You don't stop. The human will interrupt you when they're satisfied.
 If no improvement in 20+ consecutive runs, change strategy drastically.
+
+## Learnings (updated 2026-07-02)
+
+**Metric v2 (2026-07-02):** primary metric changed from `hit_rate_at_20` to
+`row_score` = 0.6*hit@20 + 0.4*hit@10 (synthetic users only). Rationale: pure
+hit@20 rewarded reorderings that buried good picks below position 10, and
+synthetic-only keeps the metric comparable when real-user fixtures land
+(`real_row_score` is tracked separately). results.tsv was reset; pre-reset
+history under the old metric:
+
+| run | hit@20 | status  | change |
+|-----|--------|---------|--------|
+| 1   | 0.8750 | keep    | baseline: v1 port (seed-concat union) |
+| 2   | 0.7333 | discard | round-robin interleave of seed lists |
+| 3   | 0.8833 | keep    | consensus-weighted ranking, linear decay (hit@10 fell 0.867→0.808) |
+| 4   | 0.8833 | discard | genre-affinity exploration slots (tie; displaced tail hits) |
+
+**Patterns:**
+- Recency dominance is signal: the newest seed's recommendations predict the
+  next watch far better than older seeds. Never dilute its top ranks.
+- Cross-seed consensus recovers deep-tail titles but must not reshuffle the
+  newest seed's top picks (hit@10 regression in run 3).
+- ~12 of 120 synthetic holdouts are pure taste-jumps (fresh popular titles
+  outside every seed's rec/similar lists) — only global trending/popular or
+  genre-discover data can reach them; exploration must not displace strong
+  personalized picks.
