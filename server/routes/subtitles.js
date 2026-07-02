@@ -86,7 +86,9 @@ module.exports = async function (fastify) {
   // WebVTT for the browser player's <track> (SRT→VTT converted, served over
   // HTTP so a same-origin <track src> can load it — file:// / .srt can't).
   fastify.get("/vtt", async (req, reply) => {
-    const r = await subs.getSubtitleVtt({ fileId: (req.query || {}).fileId });
+    const fileId = (req.query || {}).fileId;
+    if (!fileId) return reply.code(400).send({ error: "fileId required" });
+    const r = await subs.getSubtitleVtt({ fileId });
     if (!r.ok) return reply.code(502).send({ error: r.error });
     return reply
       .header("Content-Type", "text/vtt; charset=utf-8")
