@@ -232,7 +232,18 @@ export const getSourceUrl = (
     }
   });
 
-  return url.toString();
+  let out = url.toString();
+  // Web build: route Videasy through the same-origin reverse proxy (/vzy) so
+  // its player runs framed — the proxy patches out Videasy's self!==top
+  // anti-embed guard, which otherwise wipes the player inside an iframe.
+  if (
+    sourceId === "videasy" &&
+    typeof window !== "undefined" &&
+    window.__STREAMBERT_WEB__
+  ) {
+    out = out.replace("https://player.videasy.to", "/vzy/p");
+  }
+  return out;
 };
 
 export const sourceSupportsProgress = (sourceId) =>
