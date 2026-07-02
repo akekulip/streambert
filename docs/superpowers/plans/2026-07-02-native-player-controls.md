@@ -665,11 +665,15 @@ Inside the component body, after the existing `useEffect`, add controller + auto
     clearTimeout(hideTimer.current);
     hideTimer.current = setTimeout(() => setControlsVisible(false), 3000);
   }, []);
+  // Kick off the idle countdown on mount so controls hide after ~3s of no
+  // activity, and clear the timer on unmount.
+  useEffect(() => { poke(); return () => clearTimeout(hideTimer.current); }, [poke]);
 ```
-Add `useState`, `useCallback` to the existing React import line. Then change the render: remove `controls` from the `<video>`, wrap the return in a fragment that adds a pointer-move catcher and the bar:
+Add `useEffect` to the existing React import line as well (alongside `useState`, `useCallback`, `useRef`).
+Then change the render: remove `controls` from the `<video>`, and wrap the return in a single container `<div>` that carries the pointer-move handler. Because pointer events **bubble**, `onMouseMove` on this wrapper fires for moves anywhere inside it — including over the controls bar — so the bar never auto-hides while the user is hovering it or an open dropdown (this is the fix for the reviewer's onActivity concern; no separate underlay catcher, no `onActivity` prop on `VideoControls`):
 ```js
   return (
-    <>
+    <div onMouseMove={poke} onTouchStart={poke} style={{ position: "absolute", inset: 0 }}>
       <video
         ref={videoRef}
         autoPlay
@@ -685,14 +689,11 @@ Add `useState`, `useCallback` to the existing React import line. Then change the
         onClick={actions.togglePlay}
         style={{ ...PLAYER_STYLE, visibility: hidden ? "hidden" : "visible" }}
       />
-      <div onMouseMove={poke} onTouchStart={poke}
-           style={{ position: "absolute", inset: 0, zIndex: 14, pointerEvents: hidden ? "none" : "auto" }}
-           onClick={actions.togglePlay} />
       {!hidden && <VideoControls state={state} actions={actions} subs={subs} visible={controlsVisible} />}
-    </>
+    </div>
   );
 ```
-Note: the transparent catcher forwards clicks to play/pause; the bar sits above it (`zIndex 15 > 14`) so its buttons still work.
+Note: clicking the `<video>` toggles play/pause (its own `onClick`); the bar's buttons sit above the video and receive their own clicks; the wrapper only listens for pointer *movement* to keep controls awake. The bar's `visible` prop already sets `pointerEvents: none` when hidden, so a hidden bar never blocks clicks to the video.
 
 - [ ] **Step 2: Verify it builds**
 
