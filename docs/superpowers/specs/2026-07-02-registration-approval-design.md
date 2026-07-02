@@ -15,7 +15,9 @@ should be able to watch until the **admin approves** them. New signups sit in a
 - **Sign up** with an **email or phone number** + **password** (no username).
   **No verification** — no email/SMS code, no 2FA. Admin approval is the only gate.
 - New accounts are created **pending** (can't watch anything).
-- A pending user **can log in** but every screen shows **"awaiting approval"**.
+- A pending user **can log in** but every screen shows **"awaiting approval"**,
+  including **WhatsApp and Telegram links to contact the admin** to request
+  activation.
 - Admin sees a **"Pending approval" list with a count badge** in the admin
   panel, and **Activate** (or reject/delete) each one.
 - After activation the user can watch normally.
@@ -54,6 +56,14 @@ self-registrations.
 - `listUsers`, `getUserByUsername`, `getUserById` SELECTs add `status`.
 - New: `setUserStatus(db, id, status)`.
 
+**Public config for contact links — `server/routes/meta.js` (or auth):**
+- `GET /api/config` (OPEN, unauthenticated): returns
+  `{ whatsapp, telegram }` — the admin contact links for the pending screen,
+  read from env (`STREAMBERT_ADMIN_WHATSAPP`, `STREAMBERT_ADMIN_TELEGRAM`).
+  Normalize: a value starting with `http` is used as-is; otherwise WhatsApp →
+  `https://wa.me/<digits-only>` and Telegram → `https://t.me/<handle-without-@>`.
+  Unset → `null` (client hides that link). No other secrets are exposed here.
+
 **`server/routes/auth.js`**
 - `POST /api/register` (OPEN, unauthenticated, rate-limited by `loginThrottle`
   keyed on IP): body `{ identifier, password }`. Returns `400` for invalid
@@ -90,6 +100,9 @@ the pre-launch "don't expose an open proxy" hardening.
 - **`App.jsx`**: after login, if `me.status !== 'active'`, render a full-screen
   **PendingScreen** ("Your account is awaiting approval" / for `disabled`,
   "Your account has been suspended") with a Log out button — instead of the app.
+  PendingScreen fetches `GET /api/config` and shows **WhatsApp** and **Telegram**
+  contact buttons (each hidden if its link is null) so the user can message the
+  admin to get approved.
 - **Admin surface** (`UsersAdminPanel.jsx`): a **"Pending approval"** section at
   the top listing `status==='pending'` users with **Activate** and **Reject**
   buttons, and a **count badge** on the Admin entry. Active/suspended users list
