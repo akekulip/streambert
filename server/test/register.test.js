@@ -127,3 +127,16 @@ test("setUserStatus refuses to suspend the last admin", () => {
   assert.throws(() => setUserStatus(db, admin.id, "disabled"), (e) => e.code === "LAST_ADMIN");
   assert.equal(db.prepare("SELECT status FROM users WHERE id=?").get(admin.id).status, "active");
 });
+
+test("setUserStatus refuses to suspend the last ACTIVE admin among multiple admins", () => {
+  const db = openDb(":memory:");
+  const a1 = insertUser(db, { username: "admin1", password: "adminpass", role: "admin" });
+  const a2 = insertUser(db, { username: "admin2", password: "adminpass", role: "admin" });
+  setUserStatus(db, a1.id, "disabled"); // ok — a2 still active
+  assert.throws(() => setUserStatus(db, a2.id, "disabled"), (e) => e.code === "LAST_ADMIN");
+  assert.equal(db.prepare("SELECT status FROM users WHERE id=?").get(a2.id).status, "active");
+  // sanity: suspending a normal user is still fine
+  const u = insertUser(db, { username: "u@x.com", password: "password1", role: "user" });
+  setUserStatus(db, u.id, "disabled");
+  assert.equal(db.prepare("SELECT status FROM users WHERE id=?").get(u.id).status, "disabled");
+});

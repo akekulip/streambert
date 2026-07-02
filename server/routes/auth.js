@@ -42,7 +42,7 @@ module.exports = async function (fastify) {
   });
 
   fastify.post("/api/register", async (req, reply) => {
-    const key = `register|${req.ip}`;
+    const key = `register-throttle:${req.ip}`;
     if (fastify.loginThrottle.isLocked(key)) {
       return reply.code(429).send({ error: "too many attempts, try again later" });
     }

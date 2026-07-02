@@ -90,10 +90,15 @@ function setUserStatus(db, id, status) {
   if (!VALID_STATUS.includes(status)) throw new Error("invalid status");
   if (status === "disabled") {
     const user = getUserById(db, id);
-    if (user && user.role === "admin" && countAdmins(db) <= 1) {
-      const err = new Error("cannot suspend the last admin");
-      err.code = "LAST_ADMIN";
-      throw err;
+    if (user && user.role === "admin" && user.status === "active") {
+      const activeAdmins = db
+        .prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND status = 'active'")
+        .get().n;
+      if (activeAdmins <= 1) {
+        const err = new Error("cannot suspend the last active admin");
+        err.code = "LAST_ADMIN";
+        throw err;
+      }
     }
   }
   const info = db.prepare("UPDATE users SET status = ? WHERE id = ?").run(status, id);
