@@ -69,15 +69,27 @@ async function recommend({ history, fetchTmdb, limit = 20, now = Date.now() }) {
   };
 
   const lists = await Promise.all(sources.map(fetchOne));
-  const seen = new Set();
-  const deduped = [];
-  for (const item of lists.flat()) {
-    const key = titleKey(item.media_type, item.id);
-    if (seen.has(key) || watchedKeys.has(key)) continue;
-    seen.add(key);
-    deduped.push({ media_type: item.media_type, id: item.id });
-  }
-  return deduped.slice(0, limit);
+  // Consensus-weighted ranking: the newest seed keeps primacy (recency is the
+  // strongest signal), but titles recommended by several recent seeds get a
+  // cumulative boost so cross-seed agreement can outrank the newest seed's
+  // deep tail. Ties keep insertion (recency) order.
+  const SEED_WEIGHT = [1, 0.35, 0.3, 0.25, 0.2];
+  const scored = new Map();
+  lists.forEach((list, s) => {
+    const w = SEED_WEIGHT[s] ?? 0.15;
+    list.forEach((item, rank) => {
+      const key = titleKey(item.media_type, item.id);
+      if (watchedKeys.has(key)) return;
+      const gain = w * Math.max(0, 1 - rank / 25);
+      const prev = scored.get(key);
+      if (prev) prev.score += gain;
+      else scored.set(key, { media_type: item.media_type, id: item.id, score: gain });
+    });
+  });
+  return [...scored.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map(({ media_type, id }) => ({ media_type, id }));
 }
 
 module.exports = { recommend, titleKey };
