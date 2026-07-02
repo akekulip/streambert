@@ -55,6 +55,7 @@ test("POST /api/register creates a pending user (200) and rejects dup (409)", as
   const { app } = await makeApp();
   const r = await app.inject({ method: "POST", url: "/api/register", payload: { identifier: "z@z.com", password: "password1" } });
   assert.equal(r.statusCode, 200); assert.equal(r.json().status, "pending");
+  assert.equal(r.cookies.find((c) => c.name === "sb_session"), undefined);
   const dup = await app.inject({ method: "POST", url: "/api/register", payload: { identifier: "z@z.com", password: "password1" } });
   assert.equal(dup.statusCode, 409);
   const bad = await app.inject({ method: "POST", url: "/api/register", payload: { identifier: "nope", password: "password1" } });
