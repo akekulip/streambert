@@ -96,6 +96,7 @@ async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir, tmd
   await tryRegister("./routes/wyzie", { prefix: "/api/wyzie" });
   await tryRegister("./routes/proxy", { prefix: "/api/proxy" });
   await tryRegister("./routes/extract", { prefix: "/api/extract" });
+  await tryRegister("./routes/vzy", { prefix: "/vzy" }); // SPIKE: Videasy same-origin proxy
 
   if (distDir && fs.existsSync(distDir)) {
     await fastify.register(require("@fastify/static"), {
