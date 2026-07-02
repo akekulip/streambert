@@ -18,7 +18,7 @@
 const https = require("https");
 const http = require("http");
 const { rewriteM3u8 } = require("../lib/m3u8");
-const { assertPublicHttpUrl } = require("../lib/safeUrl");
+const { assertPublicHttpUrl, assertResolvedPublic } = require("../lib/safeUrl");
 
 // Reuse TCP+TLS connections across requests. HLS playback fetches many
 // segments/manifests from the same CDN through this proxy; without keep-alive
@@ -32,26 +32,25 @@ const DEFAULT_REFERER = "https://allmanga.to";
 const MAX_REDIRECTS = 5;
 
 // Makes the upstream request (following redirects) and resolves with the final
-// http.IncomingMessage response stream.
-function requestUpstream(targetUrl, opts, hops = 0) {
+// http.IncomingMessage response stream. Every hop is validated both by string
+// (assertPublicHttpUrl) and by resolve-time IP (assertResolvedPublic), so a
+// public-looking hostname that resolves to a private/internal address is
+// blocked before connecting — not just a public URL that redirects to one.
+async function requestUpstream(targetUrl, opts, hops = 0) {
+  if (hops > MAX_REDIRECTS) throw new Error("too many redirects");
+  const u = assertPublicHttpUrl(targetUrl);
+  await assertResolvedPublic(u);
+
+  const lib = u.protocol === "https:" ? https : http;
+  const headers = {
+    "User-Agent": opts.ua,
+    Referer: opts.referer,
+    Accept: "*/*",
+  };
+  if (opts.origin) headers.Origin = opts.origin;
+  if (opts.range) headers.Range = opts.range;
+
   return new Promise((resolve, reject) => {
-    if (hops > MAX_REDIRECTS) return reject(new Error("too many redirects"));
-    let u;
-    try {
-      u = assertPublicHttpUrl(targetUrl);
-    } catch (e) {
-      return reject(e);
-    }
-
-    const lib = u.protocol === "https:" ? https : http;
-    const headers = {
-      "User-Agent": opts.ua,
-      Referer: opts.referer,
-      Accept: "*/*",
-    };
-    if (opts.origin) headers.Origin = opts.origin;
-    if (opts.range) headers.Range = opts.range;
-
     const req = lib.request(
       {
         hostname: u.hostname,
@@ -62,7 +61,9 @@ function requestUpstream(targetUrl, opts, hops = 0) {
         agent: u.protocol === "https:" ? keepAliveHttps : keepAliveHttp,
       },
       (res) => {
-        // Follow redirects, preserving the spoofed headers + Range.
+        // Follow redirects, preserving the spoofed headers + Range. The
+        // recursive requestUpstream call re-validates the new target (string
+        // + resolved IP) before connecting.
         if (
           res.statusCode >= 300 &&
           res.statusCode < 400 &&
@@ -72,13 +73,6 @@ function requestUpstream(targetUrl, opts, hops = 0) {
             ? res.headers.location
             : new URL(res.headers.location, targetUrl).href;
           res.resume();
-          // A public URL can 302 to an internal one — re-check before following.
-          try {
-            assertPublicHttpUrl(loc);
-          } catch (e) {
-            reject(e);
-            return;
-          }
           requestUpstream(loc, opts, hops + 1).then(resolve, reject);
           return;
         }

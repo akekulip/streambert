@@ -181,52 +181,63 @@ function parseEpisodeSourceUrls(body) {
 }
 
 // GET a URL following redirects, returning { status, body }. Referer is set to
-// allmanga.to by default (clock.json endpoints are Referer-gated).
-function httpsGet(urlStr, referer = DEFAULT_REFERER) {
+// allmanga.to by default (clock.json endpoints are Referer-gated). Each
+// redirect hop is re-validated (a public URL can 302 to an internal address)
+// and capped so a malicious/broken upstream can't redirect forever.
+const HTTPS_GET_MAX_HOPS = 6;
+function httpsGet(urlStr, referer = DEFAULT_REFERER, hops = 0) {
   return new Promise((resolve, reject) => {
-    function doGet(url) {
-      const u = new URL(url);
-      const lib = u.protocol === "https:" ? https : http;
-      const req = lib.request(
-        {
-          hostname: u.hostname,
-          port: u.port || undefined,
-          path: u.pathname + u.search,
-          method: "GET",
-          headers: {
-            "User-Agent": DEFAULT_UA,
-            Referer: referer,
-            Origin: DEFAULT_REFERER,
-            Accept: "*/*",
-          },
+    if (hops > HTTPS_GET_MAX_HOPS) {
+      const e = new Error("too many redirects");
+      e.code = "BLOCKED_URL";
+      return reject(e);
+    }
+    const u = new URL(urlStr);
+    const lib = u.protocol === "https:" ? https : http;
+    const req = lib.request(
+      {
+        hostname: u.hostname,
+        port: u.port || undefined,
+        path: u.pathname + u.search,
+        method: "GET",
+        headers: {
+          "User-Agent": DEFAULT_UA,
+          Referer: referer,
+          Origin: DEFAULT_REFERER,
+          Accept: "*/*",
         },
-        (res) => {
-          // Follow redirects
-          if (
-            res.statusCode >= 300 &&
-            res.statusCode < 400 &&
-            res.headers.location
-          ) {
-            const loc = res.headers.location.startsWith("http")
-              ? res.headers.location
-              : new URL(res.headers.location, url).href;
-            res.resume();
-            doGet(loc);
+      },
+      (res) => {
+        // Follow redirects
+        if (
+          res.statusCode >= 300 &&
+          res.statusCode < 400 &&
+          res.headers.location
+        ) {
+          const loc = res.headers.location.startsWith("http")
+            ? res.headers.location
+            : new URL(res.headers.location, urlStr).href;
+          res.resume();
+          try {
+            assertPublicHttpUrl(loc);
+          } catch (e) {
+            reject(e);
             return;
           }
-          let data = "";
-          res.on("data", (c) => (data += c));
-          res.on("end", () => resolve({ status: res.statusCode, body: data }));
-        },
-      );
-      req.on("error", reject);
-      req.setTimeout(12000, () => {
-        req.destroy();
-        reject(new Error("timeout"));
-      });
-      req.end();
-    }
-    doGet(urlStr);
+          httpsGet(loc, referer, hops + 1).then(resolve, reject);
+          return;
+        }
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => resolve({ status: res.statusCode, body: data }));
+      },
+    );
+    req.on("error", reject);
+    req.setTimeout(12000, () => {
+      req.destroy();
+      reject(new Error("timeout"));
+    });
+    req.end();
   });
 }
 

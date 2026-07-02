@@ -12,7 +12,7 @@
 const path = require("path");
 const fs = require("fs");
 const zlib = require("zlib");
-const { assertPublicHttpUrl } = require("./safeUrl");
+const { safeFetch } = require("./safeUrl");
 
 // Resolves a SubDL-relative download path to an absolute dl.subdl.com URL,
 // rejecting anything that doesn't resolve to that exact host (defends against
@@ -276,7 +276,7 @@ async function getSubtitleUrl({ fileId } = {}, { dataDir } = {}) {
       const parts = String(fileId).split("_");
       const subdlPath = decodeURIComponent(parts.slice(2).join("_"));
       const downloadUrl = subdlUrl(subdlPath);
-      const res = await fetchWithTimeout(
+      const res = await safeFetch(
         downloadUrl,
         { headers: { "User-Agent": "Streambert" } },
         30000,
@@ -347,7 +347,7 @@ async function getSubtitleVtt({ fileId } = {}) {
     if (String(fileId).startsWith("subdl_")) {
       const parts = String(fileId).split("_");
       const subdlPath = decodeURIComponent(parts.slice(2).join("_"));
-      const res = await fetchWithTimeout(
+      const res = await safeFetch(
         subdlUrl(subdlPath),
         { headers: { "User-Agent": "Streambert" } },
         30000,
@@ -363,8 +363,7 @@ async function getSubtitleVtt({ fileId } = {}) {
       raw = extracted.data.toString("utf8");
     } else if (String(fileId).startsWith("wyzie_")) {
       const url = decodeURIComponent(String(fileId).split("_").slice(2).join("_"));
-      assertPublicHttpUrl(url);
-      const res = await fetchWithTimeout(
+      const res = await safeFetch(
         url,
         { headers: { "User-Agent": "Streambert" } },
         30000,
@@ -405,7 +404,7 @@ async function downloadSubtitlesForFile(
         if (String(sub.file_id).startsWith("subdl_")) {
           const parts = String(sub.file_id).split("_");
           const subdlPath = decodeURIComponent(parts.slice(2).join("_"));
-          const res = await fetchWithTimeout(
+          const res = await safeFetch(
             subdlUrl(subdlPath),
             { headers: { "User-Agent": "Streambert" } },
             30000,
@@ -425,8 +424,7 @@ async function downloadSubtitlesForFile(
                 )
               : null);
           if (!url) continue;
-          assertPublicHttpUrl(url);
-          const res = await fetchWithTimeout(url, {}, 30000);
+          const res = await safeFetch(url, {}, 30000);
           if (!res.ok) continue;
           fileData = Buffer.from(await res.arrayBuffer());
           const urlExt = url.split("?")[0].split(".").pop().toLowerCase();
