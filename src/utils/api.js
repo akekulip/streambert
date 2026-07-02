@@ -1,3 +1,5 @@
+import { defaultNonAnimeSource } from "./defaultSource.mjs";
+
 const TMDB_BASE = "https://api.themoviedb.org/3";
 const IMG_BASE = "https://image.tmdb.org/t/p";
 
@@ -176,7 +178,7 @@ export const PLAYER_SOURCES = [
     label: "VidSrc Direct",
     tag: null,
     note: "Server-extracted, ad-free",
-    supportsProgress: false,
+    supportsProgress: true,
     async: true,
     resolver: "vidsrc",
     params: {},
@@ -470,6 +472,11 @@ export const isAnimeContent = (item, details) => {
 // Default sources
 export const ANIME_DEFAULT_SOURCE = "allmanga";
 export const NON_ANIME_DEFAULT_SOURCE = "videasy";
+
+// Reads the runtime web flag; call at render time (not module load) so the
+// web shim has already set window.__STREAMBERT_WEB__.
+export const getDefaultNonAnimeSource = () =>
+  defaultNonAnimeSource(typeof window !== "undefined" && !!window.__STREAMBERT_WEB__);
 
 // ── Episode Group fetch (localStorage + in-memory cache, 7-day TTL) ─────────
 // Episode groups almost never change, so we cache aggressively across sessions.
