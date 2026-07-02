@@ -12,15 +12,15 @@ function isValidPassword(s) {
   return String(s || "").length >= 8;
 }
 
-function insertUser(db, { username, password, role = "user" }) {
+function insertUser(db, { username, password, role = "user", status = "active" }) {
   const uname = String(username || "").trim();
   const { hash, salt } = hashPassword(password);
   const created_at = Date.now();
   let info;
   try {
     info = db
-      .prepare("INSERT INTO users (username, pw_hash, pw_salt, role, created_at) VALUES (?,?,?,?,?)")
-      .run(uname, hash, salt, role, created_at);
+      .prepare("INSERT INTO users (username, pw_hash, pw_salt, role, status, created_at) VALUES (?,?,?,?,?,?)")
+      .run(uname, hash, salt, role, status, created_at);
   } catch (e) {
     // better-sqlite3 exposes a structured code; fall back to the message text.
     if (e.code === "SQLITE_CONSTRAINT_UNIQUE" || String(e.message).includes("UNIQUE")) {
@@ -30,7 +30,7 @@ function insertUser(db, { username, password, role = "user" }) {
     }
     throw e;
   }
-  return { id: info.lastInsertRowid, username: uname, role, created_at };
+  return { id: info.lastInsertRowid, username: uname, role, status, created_at };
 }
 
 function createUser(db, { username, password, role = "user" }) {
@@ -49,7 +49,7 @@ function getUserById(db, id) {
 }
 
 function listUsers(db) {
-  return db.prepare("SELECT id, username, role, created_at FROM users ORDER BY id").all();
+  return db.prepare("SELECT id, username, role, status, created_at FROM users ORDER BY id").all();
 }
 
 function countAdmins(db) {
@@ -80,8 +80,20 @@ function bootstrapAdmin(db, { adminUser, adminPassword }) {
   return insertUser(db, { username: adminUser || "admin", password: adminPassword, role: "admin" });
 }
 
+const VALID_STATUS = ["pending", "active", "disabled"];
+function registerUser(db, { identifier, password }) {
+  if (!isValidIdentifier(identifier)) { const e = new Error("invalid email or phone"); e.code = "BADINPUT"; throw e; }
+  if (!isValidPassword(password)) { const e = new Error("invalid password"); e.code = "BADINPUT"; throw e; }
+  return insertUser(db, { username: identifier, password, role: "user", status: "pending" });
+}
+function setUserStatus(db, id, status) {
+  if (!VALID_STATUS.includes(status)) throw new Error("invalid status");
+  const info = db.prepare("UPDATE users SET status = ? WHERE id = ?").run(status, id);
+  if (info.changes === 0) throw new Error("no such user");
+}
+
 module.exports = {
   insertUser, createUser, getUserByUsername, getUserById, listUsers,
   countAdmins, resetPassword, deleteUser, bootstrapAdmin, verifyPassword,
-  isValidIdentifier, isValidPassword,
+  isValidIdentifier, isValidPassword, registerUser, setUserStatus,
 };
