@@ -29,7 +29,7 @@ import {
   cleanAnilistDescription,
   isAnimeContent,
   ANIME_DEFAULT_SOURCE,
-  NON_ANIME_DEFAULT_SOURCE,
+  getDefaultNonAnimeSource,
   NEEDS_INTERCEPT,
 } from "../utils/api";
 import {
@@ -391,7 +391,7 @@ export default function TVPage({
   const [m3u8Url, setM3u8Url] = useState(null);
   const [interceptedSubs, setInterceptedSubs] = useState([]);
   const [playerSource, setPlayerSource] = useState(
-    () => storage.get("playerSource") || NON_ANIME_DEFAULT_SOURCE,
+    () => storage.get("playerSource") || getDefaultNonAnimeSource(),
   );
   const [showSourceMenu, setShowSourceMenu] = useState(false);
   // Derived from playerSource, computed once per render instead of 5-6× inline
@@ -667,7 +667,7 @@ export default function TVPage({
       if (currentSrc?.tag) {
         const saved = storage.get("playerSource");
         const savedSrc = PLAYER_SOURCES.find((s) => s.id === saved);
-        setPlayerSource(!savedSrc?.tag ? saved : NON_ANIME_DEFAULT_SOURCE);
+        setPlayerSource(!savedSrc?.tag ? saved : getDefaultNonAnimeSource());
       }
     }
     return () => {
@@ -1950,6 +1950,16 @@ export default function TVPage({
                         startTime={webMedia.startTime}
                         hidden={webviewLoading}
                         onReady={() => setWebviewLoading(false)}
+                        wrapRef={playerWrapRef}
+                        progressKey={currentProgressKey}
+                        onSaveProgress={saveProgress}
+                        onMarkWatched={onMarkWatched}
+                        watchedThreshold={watchedThreshold}
+                        storage={storage}
+                        tmdbId={String(item.id)}
+                        mediaType="tv"
+                        season={selectedSeason}
+                        episode={selectedEp?.episode_number}
                       />
                     )
                   ) : (
