@@ -1,7 +1,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const { createUser, listUsers, resetPassword, deleteUser } = require("../lib/users");
+const { createUser, listUsers, resetPassword, deleteUser, setUserStatus } = require("../lib/users");
 const { recommend } = require("../lib/recommendations");
 const { getAnalytics } = require("../lib/analytics");
 
@@ -117,6 +117,15 @@ module.exports = async function (fastify) {
     } catch (e) {
       return reply.code(400).send({ error: e.message });
     }
+  });
+
+  fastify.post("/api/admin/users/:id/activate", async (req, reply) => {
+    try { setUserStatus(fastify.db, Number(req.params.id), "active"); return { ok: true }; }
+    catch (e) { return reply.code(400).send({ error: e.message }); }
+  });
+  fastify.post("/api/admin/users/:id/suspend", async (req, reply) => {
+    try { setUserStatus(fastify.db, Number(req.params.id), "disabled"); return { ok: true }; }
+    catch (e) { return reply.code(400).send({ error: e.message }); }
   });
 
   fastify.delete("/api/admin/users/:id", async (req, reply) => {

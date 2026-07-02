@@ -70,3 +70,17 @@ test("deleting a user immediately invalidates their session", async () => {
   assert.equal(after.statusCode, 401);
   await app.close();
 });
+
+test("admin can activate and suspend a pending user", async () => {
+  const { app, db } = await makeApp();
+  const reg = await app.inject({ method: "POST", url: "/api/register", payload: { identifier: "p@p.com", password: "password1" } });
+  const id = db.prepare("SELECT id FROM users WHERE username='p@p.com' COLLATE NOCASE").get().id;
+  const cookie = await cookieFor(app, "admin", "adminpass");
+  const act = await app.inject({ method: "POST", url: `/api/admin/users/${id}/activate`, cookies: { sb_session: cookie } });
+  assert.equal(act.statusCode, 200);
+  assert.equal(db.prepare("SELECT status FROM users WHERE id=?").get(id).status, "active");
+  const sus = await app.inject({ method: "POST", url: `/api/admin/users/${id}/suspend`, cookies: { sb_session: cookie } });
+  assert.equal(sus.statusCode, 200);
+  assert.equal(db.prepare("SELECT status FROM users WHERE id=?").get(id).status, "disabled");
+  await app.close();
+});
