@@ -39,17 +39,58 @@ function humanBytes(bytes) {
         : bytes + " B";
 }
 
+const MAX_SUB_BYTES = 10 * 1024 * 1024; // subtitles are tiny; 10 MB is generous
+const MAX_SUBTITLES = 25; // bounds total concurrent subtitle fetches per download
+
+// Reads a web ReadableStream (e.g. a fetch Response's `body`) up to
+// `maxBytes`. Returns the concatenated Buffer if the stream stays within the
+// cap, or null if it produced more than maxBytes (the stream is cancelled as
+// soon as the cap is exceeded, so the rest of the body is never buffered).
+// A null/undefined stream (e.g. an empty response body) reads as empty.
+async function readCapped(stream, maxBytes) {
+  if (!stream) return Buffer.alloc(0);
+  const reader = stream.getReader();
+  const chunks = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > maxBytes) {
+      try {
+        await reader.cancel();
+      } catch {}
+      return null;
+    }
+    chunks.push(Buffer.from(value));
+  }
+  return Buffer.concat(chunks);
+}
+
 // ── Subtitle file downloader (used during run-download completion) ─────────────
 // http(s) only — no `file:` branch (that was an arbitrary local-file read).
 // Goes through safeFetch, which rejects private/loopback/link-local targets
 // and re-validates every redirect hop (SSRF guard). Rejects on any blocked or
-// non-http(s) URL; resolves false on a non-2xx response; resolves true once
-// the body is written to destPath.
-async function downloadSubtitleFile(url, destPath) {
+// non-http(s) URL; resolves false on a non-2xx response, an over-cap
+// Content-Length, or a body that exceeds `maxBytes` while streaming (read via
+// `readCapped` so the response is never buffered whole in RAM before the
+// check); resolves true once the body is written to destPath. On a write
+// failure, the partial file is unlinked before the error propagates.
+async function downloadSubtitleFile(url, destPath, maxBytes = MAX_SUB_BYTES) {
   const res = await safeFetch(url, {}, 20000);
   if (!res.ok) return false;
-  const buf = Buffer.from(await res.arrayBuffer());
-  fs.writeFileSync(destPath, buf);
+  const cl = Number(res.headers.get("content-length"));
+  if (cl && cl > maxBytes) return false;
+  const buf = await readCapped(res.body, maxBytes);
+  if (buf === null) return false;
+  try {
+    fs.writeFileSync(destPath, buf);
+  } catch (e) {
+    try {
+      fs.unlinkSync(destPath);
+    } catch {}
+    throw e;
+  }
   return true;
 }
 
@@ -242,7 +283,12 @@ function createDownloadManager({ dataDir, downloaderPath, broadcast }) {
         episode: episode || null,
         posterPath: posterPath || null,
         tmdbId: tmdbId || mediaId || null,
-        subtitles: Array.isArray(subtitles) ? subtitles : [],
+        // Cap upfront: subtitles is client-supplied and otherwise unbounded,
+        // and every entry here is fetched in parallel below (Promise.all).
+        subtitles: (Array.isArray(subtitles) ? subtitles : []).slice(
+          0,
+          MAX_SUBTITLES,
+        ),
         subtitlePaths: [],
         logPath,
       };
@@ -906,4 +952,7 @@ module.exports = {
   createDownloadManager,
   isPathInside,
   downloadSubtitleFile,
+  readCapped,
+  MAX_SUB_BYTES,
+  MAX_SUBTITLES,
 };
