@@ -85,6 +85,11 @@ test("deleteSubtitleFile rejects a path outside the allowed dataDir and does not
 });
 
 test("deleteSubtitleFile rejects an absolute path like /etc/passwd", () => {
+  // Never risk an actual unlink of /etc/passwd if this suite is ever run as
+  // root (e.g. a root Docker CI image) — as non-root the OS denies it anyway,
+  // so skipping under root loses no coverage (the "outside dataDir" test above
+  // already proves the containment guard rejects external paths).
+  if (process.getuid && process.getuid() === 0) return;
   const dataDir = makeTempDataDir();
 
   const result = deleteSubtitleFile(
