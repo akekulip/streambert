@@ -12,8 +12,12 @@ const DUMMY = hashPassword("streambert-constant-time-dummy");
 module.exports = async function (fastify) {
   fastify.post("/api/login", async (req, reply) => {
     const { username, password } = req.body || {};
-    const key = `${String(username || "").toLowerCase()}|${req.ip}`;
-    if (fastify.loginThrottle.isLocked(key)) {
+    const uname = String(username || "").toLowerCase();
+    const key = `${uname}|${req.ip}`;
+    // Two independent throttles: per-(user,ip) bounds one IP hammering one
+    // account; per-username (I4) bounds an attacker rotating source IPs
+    // against the same account — check both before doing any password work.
+    if (fastify.loginThrottle.isLocked(key) || fastify.usernameThrottle.isLocked(uname)) {
       return reply.code(429).send({ error: "too many attempts, try again later" });
     }
     const user = username ? getUserByUsername(fastify.db, username) : null;
@@ -28,9 +32,11 @@ module.exports = async function (fastify) {
     const ok = !!user && hashOk;
     if (!ok) {
       fastify.loginThrottle.registerFailure(key);
+      fastify.usernameThrottle.registerFailure(uname);
       return reply.code(401).send({ error: "invalid username or password" });
     }
     fastify.loginThrottle.reset(key);
+    fastify.usernameThrottle.reset(uname);
     reply.setCookie("sb_session", reply.signCookie(String(user.id)), {
       path: "/",
       httpOnly: true,

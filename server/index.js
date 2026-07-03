@@ -62,6 +62,10 @@ async function main() {
   const app = await buildApp({
     db, cookieSecret: COOKIE_SECRET,
     loginThrottle: createLoginThrottle(),
+    // I4: IP-independent, username-scoped throttle — 20 failures / 15min
+    // across all IPs locks the account for 15min, closing the distributed
+    // brute-force gap the per-(user,ip) throttle above leaves open.
+    usernameThrottle: createLoginThrottle({ max: 20, windowMs: 15 * 60 * 1000, lockoutMs: 15 * 60 * 1000 }),
     dataDir: DATA_DIR, distDir: DIST_DIR,
   });
   await app.listen({ port: PORT, host: "0.0.0.0" });

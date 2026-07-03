@@ -7,6 +7,7 @@ const { createRecsCache } = require("./lib/recsCache");
 const { createExtractClient } = require("./lib/extract");
 const { createPrewarm } = require("./lib/prewarm");
 const { createCanary } = require("./lib/canary");
+const { createLoginThrottle } = require("./lib/loginThrottle");
 
 const OPEN = ["/api/login", "/api/logout", "/api/events", "/api/register", "/api/config"];
 
@@ -19,7 +20,7 @@ function resolveUser(fastify, req) {
   return user ? { id: user.id, username: user.username, role: user.role, status: user.status } : null;
 }
 
-async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir, tmdbFetch, extractClient, prewarm, canary }) {
+async function buildApp({ db, cookieSecret, loginThrottle, usernameThrottle, dataDir, distDir, tmdbFetch, extractClient, prewarm, canary }) {
   // trustProxy: behind Caddy, use the X-Forwarded-For client IP (not the
   // proxy's) so the login throttle keys on the real client. Scoped to exactly
   // one hop (the Caddy reverse_proxy in front of this app) so a client can't
@@ -43,6 +44,19 @@ async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir, tmd
 
   fastify.decorate("db", db);
   fastify.decorate("loginThrottle", loginThrottle);
+  // IP-independent, username-only login throttle (I4): the per-(user,ip)
+  // throttle above bounds one IP hammering one account, but an attacker
+  // rotating source IPs sails past it — each IP gets its own bucket. This
+  // second counter keys on the lowercased username alone, with a higher
+  // threshold and longer cooldown, so distributed brute-force against a
+  // single account (e.g. "admin") is still bounded. Additive: both checks
+  // run in routes/auth.js, and a successful login resets both.
+  fastify.decorate(
+    "usernameThrottle",
+    usernameThrottle !== undefined
+      ? usernameThrottle
+      : createLoginThrottle({ max: 20, windowMs: 15 * 60 * 1000, lockoutMs: 15 * 60 * 1000 }),
+  );
   fastify.decorate("config", { DATA_DIR: dataDir });
   fastify.decorate("sessionValid", (req) => !!resolveUser(fastify, req));
   fastify.decorate("resolveUser", (req) => resolveUser(fastify, req));
