@@ -37,12 +37,15 @@ const PLAYER_STYLE = {
   background: "black",
 };
 
-// <iframe> for movie/TV embed sources. No sandbox: several providers detect the
-// sandbox *attribute* itself and refuse to play ("Iframe Sandbox Detected"),
-// even when scripts/forms are allowed. Trade-off: without it an ad script in the
-// embed can `top.location = …` and hijack/wipe the app — but that only fires when
-// an ad domain actually loads, which the deployment's AdGuard DNS blocks. So we
-// keep the sandbox off for compatibility and rely on the ad-blocker.
+// <iframe> for movie/TV embed sources. Sandboxed to block top-nav hijack and
+// popunders: no allow-top-navigation(-by-user-activation) and no allow-popups,
+// so a malicious ad inside the embed can't `top.location =` the tab to a
+// phishing page or spawn popunder windows. allow-same-origin is scoped to the
+// iframe's own (cross-origin) origin, not ours, so it doesn't grant the embed
+// access to this app. Trade-off: some providers detect the sandbox *attribute*
+// itself and refuse to play ("Iframe Sandbox Detected") even with
+// scripts/forms allowed — if a specific provider breaks, test per-provider in
+// the manual pass and relax only the minimal token that provider needs.
 export function WebEmbedPlayer({ src, hidden, onReady }) {
   return (
     <iframe
@@ -51,6 +54,7 @@ export function WebEmbedPlayer({ src, hidden, onReady }) {
       onLoad={onReady}
       allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
       allowFullScreen
+      sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"
       style={{ ...PLAYER_STYLE, visibility: hidden ? "hidden" : "visible" }}
     />
   );
