@@ -124,6 +124,7 @@ openssl rand -hex 32
 | `STREAMBERT_PASSWORD`      | ✅       | —                        | Login password for the single-user web app. |
 | `STREAMBERT_COOKIE_SECRET` | ✅       | (dev fallback; change it)| Secret that signs the session cookie. |
 | `DOMAIN`                   | ✅       | —                        | Caddy site address (public domain, or LAN host/IP for `tls internal`). |
+| `STREAMBERT_SECURE_COOKIES` | ✅ (public) | (none) | Set to `1` on any public deployment to force the `Secure` cookie flag regardless of the (client-spoofable) `X-Forwarded-Proto` header. |
 | `STREAMBERT_ADMIN_USER`     | ➖       | `admin`                  | Username for the first-run bootstrap admin (only when the user DB is empty). |
 | `STREAMBERT_ADMIN_PASSWORD` | ➖       | (`STREAMBERT_PASSWORD`)  | Password for the bootstrap admin; falls back to `STREAMBERT_PASSWORD`. |
 | `STREAMBERT_TMDB_TOKEN`    | ➖       | (none)                   | TMDB Read Access Token. Set it to pre-seed the key and skip the in-app setup screen; a token saved in the app overrides it. |

@@ -35,7 +35,12 @@ module.exports = async function (fastify) {
       path: "/",
       httpOnly: true,
       sameSite: "lax",
-      secure: req.headers["x-forwarded-proto"] === "https",
+      // Force Secure in production via an explicit opt-in flag; the
+      // x-forwarded-proto header is client-controllable (a client can send
+      // `x-forwarded-proto: http` to strip the Secure attribute) so it's only
+      // trusted as a fallback for dev/LAN deployments that don't set the flag.
+      secure: process.env.STREAMBERT_SECURE_COOKIES === "1" ||
+        req.headers["x-forwarded-proto"] === "https",
       maxAge: 60 * 60 * 24 * 30,
     });
     return { ok: true };
