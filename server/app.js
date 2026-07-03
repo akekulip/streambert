@@ -22,8 +22,12 @@ function resolveUser(fastify, req) {
 async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir, tmdbFetch, extractClient, prewarm, canary }) {
   // trustProxy: behind Caddy, use the X-Forwarded-For client IP (not the
   // proxy's) so the login throttle keys on the real client and X-Forwarded-Proto
-  // is honored for the secure-cookie decision.
-  const fastify = require("fastify")({ logger: true, trustProxy: true });
+  // is honored for the secure-cookie decision. Scoped to exactly one hop (the
+  // Caddy reverse_proxy in front of this app) so a client can't spoof req.ip by
+  // forging a leftmost X-Forwarded-For entry. Re-verify this hop count once the
+  // Cloudflare Tunnel topology is final — if cloudflared -> Caddy -> app ends up
+  // being 2 hops to the app, bump this to 2.
+  const fastify = require("fastify")({ logger: true, trustProxy: 1 });
   await fastify.register(require("@fastify/cookie"), { secret: cookieSecret });
   await fastify.register(require("@fastify/websocket"));
   // Brotli/gzip compression for text responses (HTML/CSS/JS/JSON). Binary/media

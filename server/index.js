@@ -34,8 +34,18 @@ const { openDb } = require("./lib/db");
 const { bootstrapAdmin } = require("./lib/users");
 const { createLoginThrottle } = require("./lib/loginThrottle");
 const { buildApp } = require("./app");
+const { isInsecureCookieSecret } = require("./lib/cookieSecret");
 
-const COOKIE_SECRET = process.env.STREAMBERT_COOKIE_SECRET || "streambert-dev-secret-change-me";
+const COOKIE_SECRET = process.env.STREAMBERT_COOKIE_SECRET;
+// Refuse to start with no secret or the source-visible dev fallback — that
+// would let anyone forge signed session cookies. Tests build the app directly
+// via buildApp() with their own cookieSecret, so this guard never runs for them.
+if (process.env.NODE_ENV !== "test" && isInsecureCookieSecret(COOKIE_SECRET)) {
+  console.error(
+    "FATAL: STREAMBERT_COOKIE_SECRET is unset or the insecure default. Set it to a strong random value (openssl rand -hex 32). Refusing to start.",
+  );
+  process.exit(1);
+}
 const DIST_DIR = path.join(__dirname, "..", "dist");
 const DATA_DIR = process.env.STREAMBERT_DATA || path.join(__dirname, "..", "data");
 const PORT = Number(process.env.PORT || 8787);
