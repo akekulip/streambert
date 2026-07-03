@@ -1,6 +1,21 @@
 # Streambert Web Port — Handoff
 
-_Last updated: 2026-07-01 (late — post Phase 2 deploy). Branch: `web-port` (local only — not pushed to any remote)._
+_Last updated: 2026-07-02 (post security-hardening). Branch: `web-port` (pushed to github.com/akekulip/streambert)._
+
+---
+
+## ⭐ NEXT RUN (queued 2026-07-02 → 2026-07-03)
+
+**Where we are:** self-registration + admin-approval feature shipped; a full pre-launch security audit found 8 Critical + 4 Important issues; **all fixed** via a 10-task hardening plan (`docs/superpowers/plans/2026-07-02-security-hardening.md`), each task security-reviewed + fix-looped, final opus whole-branch review = **READY to expose publicly after the deploy steps**. Suite 140/140, build green. Full detail: `docs/superpowers/audits/2026-07-02-prelaunch-security-audit.md` (remediation header) + `.superpowers/sdd/progress.md` ledger.
+
+**Tomorrow, in order:**
+1. **Close the `/api/files` cross-user gap** — the one "must-fix-before-strangers" residual. `GET /api/files?path=` and the subtitle delete/download file ops serve/mutate any file under `<dataDir>/downloads` with only an `isPathInside` check — no per-user ownership check. Add a registry-ownership check (same pattern I1 used for the downloads registry). Acceptable to launch to *vetted* approved users without it, but close it before opening to strangers.
+2. **Deploy** the hardened branch to Vision — **GATED on Philip providing:** WhatsApp number + Telegram handle (→ `STREAMBERT_ADMIN_WHATSAPP` / `STREAMBERT_ADMIN_TELEGRAM` for the pending-screen contact links) and the **Cloudflare tunnel token**. Deploy steps: rebuild image + `docker run` MUST add `-e STREAMBERT_COOKIE_SECRET=<strong>` (app now fail-fasts without it) + `-e STREAMBERT_SECURE_COOKIES=1`; keep `STREAMBERT_VZY` unset (Videasy-via-proxy stays off publicly); confirm the extractor port is not routed by Caddy/cloudflared; re-verify the `trustProxy` hop count once the cloudflared→Caddy→app chain is final.
+3. **Manual pass:** register (email or phone + password) → pending screen shows WhatsApp/Telegram links → admin approves in the Users panel's "Pending approval" list → account can watch.
+
+**Optional / later:** full per-user downloads-dir isolation; move the subtitle-key flow server-side then admin-gate `GET /api/secure`; progressive-delay instead of the hard admin-login-lockout.
+
+---
 
 This is the self-hostable **web port** of the Streambert Electron app. It runs as a
 Fastify server + built React frontend, deployed on the **Vision** server.
