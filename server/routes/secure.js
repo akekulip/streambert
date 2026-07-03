@@ -36,7 +36,10 @@ module.exports = async function (fastify) {
     return { value: load()[key] ?? envFallback[key] ?? null };
   });
 
-  fastify.put("/:key", async (req) => {
+  fastify.put("/:key", async (req, reply) => {
+    if (!req.user || req.user.role !== "admin") {
+      return reply.code(403).send({ error: "forbidden" });
+    }
     const obj = load();
     const v = req.body && req.body.value;
     if (v == null || v === "") delete obj[req.params.key];
