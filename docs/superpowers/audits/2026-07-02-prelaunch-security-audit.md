@@ -1,5 +1,12 @@
 # Streambert Pre-Launch Security Audit — 2026-07-02
 
+> **REMEDIATION STATUS (2026-07-02): ALL 8 CRITICAL + 4 IMPORTANT FIXED.** Executed as a 10-task hardening plan (`docs/superpowers/plans/2026-07-02-security-hardening.md`), each task implemented + security-reviewed + fix-looped, then a final whole-branch opus review. Suite 140/140, build green. Final verdict: **READY TO EXPOSE PUBLICLY after the deploy steps below**, for the intended admin-approved userbase on self-hosted Vision. Remaining items are triaged residuals, not open Criticals.
+>
+> **Mandatory deploy steps before opening the tunnel:** (1) `STREAMBERT_COOKIE_SECRET` set to a strong random value in the Vision `docker run` (code fail-fasts if unset, but the container must supply it); (2) `STREAMBERT_SECURE_COOKIES=1`; (3) `STREAMBERT_VZY` unset/absent (keeps `/vzy` off); (4) extractor sidecar port not routed by Caddy/cloudflared; (5) re-verify the `trustProxy` hop count once the cloudflared→Caddy→app chain is final.
+>
+> **Documented residuals (acceptable for vetted-users launch):** cross-user file access within the shared downloads dir (`/api/files` + subtitle file ops lack ownership check — MUST fix before opening to a genuinely untrusted userbase); DNS-rebinding TOCTOU in the SSRF guard (acceptable on self-hosted Vision with no cloud-metadata endpoint — revisit if moved to a cloud VM); `GET /api/secure/:key` still readable by active users (third-party read keys, not PII/admin); admin-login-lockout DoS from the username throttle (availability-only, self-heals).
+
+
 **Context:** the app is about to go **public on the internet** (`xtreamz.org` via Cloudflare Tunnel) with **self-registration + admin approval**. This audit was run by three parallel security reviewers (auth/session, injection/SSRF, exposure/secrets/XSS/DoS) plus an automated feature/functional test. Every Critical/Important finding below was verified against the actual source (file:line confirmed).
 
 ## Bottom line
