@@ -93,10 +93,13 @@ module.exports = { isBlockedHost, assertPublicHttpUrl };
 - [ ] Test: `deleteSubtitleFile({subtitlePath:"/etc/passwd"})` throws / does not unlink; a path inside the subtitles dir works; a ZIP entry named `../../evil` stays contained.
 - [ ] `cd server && node --test test/` green. Commit `fix(sec): contain subtitle file write/delete/zip-slip (C2)`.
 
-## Task 3 (C3) — remove `file:` local-read in downloads
+## Task 3 (C3) — remove `file:` local-read AND SSRF-guard the download-subtitle fetch
 **Files:** Modify `server/lib/downloads.js`; Test `server/test/` (add).
-- [ ] In `downloadSubtitleFile` (`downloads.js:44-56`), remove the `if (parsedUrl.protocol === "file:")` branch entirely (subtitles come from http(s) providers). If a legit local path is ever needed, restrict to `isPathInside(path, dataDir)`.
-- [ ] Test: a `file://` subtitle url is rejected/skipped (no copy). Commit `fix(sec): drop file:// local-read in download subtitles (C3)`.
+The Task-1 SSRF re-review found `downloadSubtitleFile` (`downloads.js:44-56`) is BOTH an arbitrary local-file read (`file:` branch) AND an unguarded SSRF (it fetches an arbitrary client-supplied http(s) URL via `https.get`/`http.get`, following redirects with no validation). Fix both:
+- [ ] Remove the `if (parsedUrl.protocol === "file:")` branch entirely (subtitles come from http(s) providers) — kills the arbitrary local-file read (`file:///data/streambert.db` etc.).
+- [ ] Route the remaining http(s) fetch through the SSRF-safe path built in Task 1: `const { safeFetch } = require("./safeUrl")` and replace the raw `https.get`/`http.get` (with its own redirect recursion) with `safeFetch(url, {}, ms)` (which validates each hop by string + resolved IP and caps redirects). Adapt the response handling to `safeFetch`'s `fetch`-style Response (`res.ok`, `res.arrayBuffer()`/`res.body`) — read the current function first to preserve its copy-to-`destPath` behavior; `destPath` stays confined as before.
+- [ ] Test: a `file://` subtitle url is rejected/skipped (no copy); a client URL that resolves to a private/loopback IP is rejected (reuse the `safeUrl` guard — assert `downloadSubtitleFile` rejects `http://127.0.0.1/x`). Keep tests deterministic (literal private IP, no external DNS).
+- [ ] `cd server && node --test test/` green. Commit `fix(sec): drop file:// read + SSRF-guard download-subtitle fetch (C3)`.
 
 ## Task 4 (C4) — admin-gate the shared secret store
 **Files:** Modify `server/routes/secure.js`; Test `server/test/` (add or in admin.test.js).
