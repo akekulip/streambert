@@ -15,7 +15,7 @@ import PendingScreen from "./components/PendingScreen";
 import { storage, secureStorage, STORAGE_KEYS } from "./utils/storage";
 import { applyAccentColor } from "./utils/appearance";
 import { collectBackupData } from "./utils/backup";
-import { tmdbFetch, setApiErrorHandlers } from "./utils/api";
+import { tmdbFetch, setApiErrorHandlers, setVzyEnabled } from "./utils/api";
 import { clearAppCaches } from "./utils/storage";
 import { getMe, logout } from "./utils/session";
 import * as userState from "./utils/userState";
@@ -352,6 +352,19 @@ export default function App() {
     getMe().then((m) => { if (!cancelled) setMe(m); });
     return () => { cancelled = true; };
   }, [authGate]);
+
+  // Learn whether the server's /vzy Videasy proxy is enabled (C5: off by
+  // default) so getSourceUrl/getSelectableSources don't route through or
+  // offer a proxy the server won't actually serve.
+  useEffect(() => {
+    if (!window.__STREAMBERT_WEB__) return;
+    let cancelled = false;
+    fetch("/api/config", { credentials: "include" })
+      .then((r) => r.json())
+      .then((cfg) => { if (!cancelled) setVzyEnabled(cfg.vzy); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   // ── Per-user server state (web build): hydrate + keep in sync ─────────────
   const applyServerState = useCallback((data) => {

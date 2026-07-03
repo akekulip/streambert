@@ -112,6 +112,17 @@ export const tmdbFetch = async (path, apiKey, options = {}) => {
   return data;
 };
 
+// ── Videasy same-origin proxy availability (web build) ───────────────────────
+// Mirrors the server's STREAMBERT_VZY flag (see server/app.js — off by default,
+// C5: /vzy serves third-party JS same-origin with the session cookie). Set once
+// from GET /api/config's `vzy` field so getSourceUrl doesn't route Videasy
+// through a proxy the server hasn't registered, and the source picker doesn't
+// offer a Videasy option that would just fail to load.
+let _vzyEnabled = false;
+export const setVzyEnabled = (v) => {
+  _vzyEnabled = !!v;
+};
+
 // ── Player Sources ────────────────────────────────────────────────────────────
 // supportsProgress: true = executeJavaScript tracking works for this source
 export const PLAYER_SOURCES = [
@@ -194,6 +205,13 @@ export const getSelectableSources = () =>
     (s) =>
       s.id !== "vidsrc-direct" ||
       (typeof window !== "undefined" && window.__STREAMBERT_WEB__),
+  ).filter(
+    // Videasy is only offered on web when the server's /vzy proxy is enabled —
+    // without it, Videasy's anti-embed guard blanks the player in our iframe.
+    (s) =>
+      s.id !== "videasy" ||
+      !(typeof window !== "undefined" && window.__STREAMBERT_WEB__) ||
+      _vzyEnabled,
   );
 
 export const getSourceUrl = (
@@ -239,7 +257,8 @@ export const getSourceUrl = (
   if (
     sourceId === "videasy" &&
     typeof window !== "undefined" &&
-    window.__STREAMBERT_WEB__
+    window.__STREAMBERT_WEB__ &&
+    _vzyEnabled
   ) {
     out = out.replace("https://player.videasy.to", "/vzy/p");
   }

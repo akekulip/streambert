@@ -126,7 +126,15 @@ async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir, tmd
   await tryRegister("./routes/wyzie", { prefix: "/api/wyzie" });
   await tryRegister("./routes/proxy", { prefix: "/api/proxy" });
   await tryRegister("./routes/extract", { prefix: "/api/extract" });
-  await tryRegister("./routes/vzy", { prefix: "/vzy" }); // SPIKE: Videasy same-origin proxy
+  // SPIKE: Videasy same-origin proxy. Off by default (C5: it serves third-party
+  // JS same-origin with the session cookie — a session-riding risk not safe for
+  // public exposure). Only registered when explicitly opted into; when off,
+  // /vzy/* falls through to the SPA/404 (the preHandler auth gate + onSend
+  // header hook above still reference the /vzy prefix, which is harmless when
+  // the route itself isn't registered).
+  if (process.env.STREAMBERT_VZY === "1") {
+    await tryRegister("./routes/vzy", { prefix: "/vzy" });
+  }
 
   if (distDir && fs.existsSync(distDir)) {
     await fastify.register(require("@fastify/static"), {

@@ -23,5 +23,9 @@ module.exports = async function (fastify) {
   fastify.get("/config", async () => ({
     whatsapp: normLink(process.env.STREAMBERT_ADMIN_WHATSAPP, "whatsapp"),
     telegram: normLink(process.env.STREAMBERT_ADMIN_TELEGRAM, "telegram"),
+    // Whether the /vzy Videasy same-origin proxy is registered server-side
+    // (see app.js — off by default, C5). Lets the client avoid offering/using
+    // the Videasy-via-proxy path when the server won't actually serve it.
+    vzy: process.env.STREAMBERT_VZY === "1",
   }));
 };
