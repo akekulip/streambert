@@ -251,6 +251,131 @@ test("POST /api/downloads/delete-all only wipes the caller's own downloads", asy
   }
 });
 
+// Seeds a fresh users db (admin/alice/bob) + a downloads.json registry file
+// *before* buildApp constructs the download manager (which loads the
+// registry from disk exactly once, at creation time) — this is how these
+// tests get real, known registry rows (with real subtitlePaths/filePath
+// values) into the running app without reaching into the manager instance
+// directly (it's a fastify-encapsulated decorator, not reachable from the
+// top-level `app` returned by buildApp).
+async function makeAppWithSeededRegistry(dataDir, downloadRows) {
+  const db = openDb(":memory:");
+  const admin = insertUser(db, { username: "admin", password: "adminpass", role: "admin" });
+  const alice = insertUser(db, { username: "alice", password: "alicepass1", role: "user" });
+  const bob = insertUser(db, { username: "bob", password: "bobpass1", role: "user" });
+  fs.mkdirSync(dataDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dataDir, "downloads.json"),
+    JSON.stringify(downloadRows({ admin, alice, bob })),
+  );
+  const app = await buildApp({
+    db,
+    cookieSecret: "test-secret",
+    loginThrottle: createLoginThrottle(),
+    dataDir,
+    distDir: "/nonexistent",
+  });
+  return { app, admin, alice, bob };
+}
+
+test("POST /api/downloads/prune-subs on another user's download is forbidden, leaks no subtitle paths, and does not mutate the record", async () => {
+  const dataDir = tmpDataDir("sb-dl-prune-");
+  const bobSubPath = path.join(dataDir, "secret-bob.srt");
+  const { app, bob } = await makeAppWithSeededRegistry(dataDir, ({ bob }) => [
+    {
+      id: "bob-dl-1",
+      userId: bob.id,
+      name: "BobShow",
+      status: "completed",
+      startedAt: Date.now(),
+      completedAt: Date.now(),
+      subtitlePaths: [{ lang: "en", path: bobSubPath, file_id: null }],
+    },
+  ]);
+  const aliceCookie = await cookieFor(app, "alice", "alicepass1");
+  const bobCookie = await cookieFor(app, "bob", "bobpass1");
+
+  // Alice tries to prune Bob's download's subtitle paths.
+  const pruneAttempt = await app.inject({
+    method: "POST",
+    url: "/api/downloads/prune-subs",
+    cookies: { sb_session: aliceCookie },
+    payload: { downloadId: "bob-dl-1" },
+  });
+  assert.equal(pruneAttempt.statusCode, 403);
+  const body = pruneAttempt.json();
+  assert.equal(body.ok, false);
+  assert.equal(body.code, "FORBIDDEN");
+  assert.equal(JSON.stringify(body).includes("secret-bob.srt"), false);
+
+  // Bob's record is unchanged — his subtitlePaths entry is still present
+  // (verified via Bob's own scoped read of the registry).
+  const bobAfter = (
+    await app.inject({
+      method: "GET",
+      url: "/api/downloads",
+      cookies: { sb_session: bobCookie },
+    })
+  )
+    .json()
+    .find((d) => d.id === "bob-dl-1");
+  assert.ok(bobAfter);
+  assert.equal(bobAfter.subtitlePaths.length, 1);
+  assert.equal(bobAfter.subtitlePaths[0].path, bobSubPath);
+
+  await app.close();
+});
+
+test("GET /api/downloads/size reflects only the caller's own downloads", async () => {
+  const dataDir = tmpDataDir("sb-dl-size-");
+  const aliceFile = path.join(dataDir, "alice-video.mp4");
+  const bobFile = path.join(dataDir, "bob-video.mp4");
+  fs.mkdirSync(dataDir, { recursive: true });
+  fs.writeFileSync(aliceFile, Buffer.alloc(1000, "a"));
+  fs.writeFileSync(bobFile, Buffer.alloc(5000, "b"));
+
+  const { app } = await makeAppWithSeededRegistry(dataDir, ({ alice, bob }) => [
+    {
+      id: "alice-dl-1",
+      userId: alice.id,
+      name: "AliceShow",
+      status: "completed",
+      startedAt: Date.now(),
+      completedAt: Date.now(),
+      filePath: aliceFile,
+    },
+    {
+      id: "bob-dl-1",
+      userId: bob.id,
+      name: "BobShow",
+      status: "completed",
+      startedAt: Date.now(),
+      completedAt: Date.now(),
+      filePath: bobFile,
+    },
+  ]);
+  const aliceCookie = await cookieFor(app, "alice", "alicepass1");
+  const bobCookie = await cookieFor(app, "bob", "bobpass1");
+
+  const aliceSize = await app.inject({
+    method: "GET",
+    url: "/api/downloads/size",
+    cookies: { sb_session: aliceCookie },
+  });
+  assert.equal(aliceSize.statusCode, 200);
+  assert.equal(aliceSize.json().bytes, 1000);
+
+  const bobSize = await app.inject({
+    method: "GET",
+    url: "/api/downloads/size",
+    cookies: { sb_session: bobCookie },
+  });
+  assert.equal(bobSize.json().bytes, 5000);
+  assert.notEqual(bobSize.json().bytes, aliceSize.json().bytes);
+
+  await app.close();
+});
+
 test("POST /api/downloads returns 429 once MAX_CONCURRENT_DOWNLOADS spawns are already in flight", async () => {
   const dataDir = tmpDataDir("sb-dl-cap-");
   const prevDownloader = process.env.STREAMBERT_DOWNLOADER;

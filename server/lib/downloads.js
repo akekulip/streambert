@@ -733,11 +733,7 @@ function createDownloadManager({ dataDir, downloaderPath, broadcast }) {
   // ── Registry queries / mutations ─────────────────────────────────────────
   // Scoped to the caller (I1): a regular user only ever sees their own
   // records; admins see everything (including legacy rows with no userId).
-  const getDownloads = (user) => {
-    if (user && user.role === "admin") return downloads;
-    const uid = user && user.id;
-    return downloads.filter((d) => d.userId === uid);
-  };
+  const getDownloads = (user) => downloads.filter((d) => ownsDownload(d, user));
 
   function deleteDownload({ id, filePath } = {}, user) {
     try {
@@ -819,16 +815,20 @@ function createDownloadManager({ dataDir, downloaderPath, broadcast }) {
     }
   }
 
-  async function getDownloadsSize() {
+  // Scoped to the caller (I1): only sums bytes for downloads the caller owns
+  // (admins get the total across everyone).
+  async function getDownloadsSize(user) {
     let bytes = 0;
     await Promise.all(
-      downloads.map(async (dl) => {
-        if (!dl.filePath) return;
-        try {
-          const stat = await fs.promises.stat(dl.filePath);
-          if (stat.isFile()) bytes += stat.size;
-        } catch {}
-      }),
+      downloads
+        .filter((dl) => ownsDownload(dl, user))
+        .map(async (dl) => {
+          if (!dl.filePath) return;
+          try {
+            const stat = await fs.promises.stat(dl.filePath);
+            if (stat.isFile()) bytes += stat.size;
+          } catch {}
+        }),
     );
     return { bytes };
   }
@@ -967,10 +967,16 @@ function createDownloadManager({ dataDir, downloaderPath, broadcast }) {
 
   // ── Prune subtitle paths that no longer exist (was in src/ipc/subtitles.js;
   //    routed to /api/downloads/prune-subs by the web shim) ──────────────────
-  function pruneSubtitlePaths(downloadId) {
+  // Scoped to the caller (I1): a non-owner gets the same FORBIDDEN denial
+  // shape as deleteDownload, so the route can map it to a 403 the same way —
+  // and the response never includes another user's subtitle paths.
+  function pruneSubtitlePaths(downloadId, user) {
     try {
       const idx = downloads.findIndex((d) => d.id === downloadId);
       if (idx < 0) return { ok: true, subtitlePaths: [] };
+      if (!ownsDownload(downloads[idx], user)) {
+        return { ok: false, error: "forbidden", code: "FORBIDDEN" };
+      }
       const before = downloads[idx].subtitlePaths || [];
       const after = before.filter((sp) => {
         const p = typeof sp === "string" ? sp : sp?.path;

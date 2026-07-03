@@ -66,8 +66,9 @@ module.exports = async function (fastify) {
     manager.fileExists((req.body || {}).path, req.user),
   );
 
-  // GET /size — total bytes of tracked files.
-  fastify.get("/size", async () => manager.getDownloadsSize());
+  // GET /size — total bytes of the caller's own tracked files (admins get
+  // everyone's).
+  fastify.get("/size", async (req) => manager.getDownloadsSize(req.user));
 
   // POST /delete-all — wipe the caller's own downloads + their files (admins
   // wipe everyone's).
@@ -81,7 +82,13 @@ module.exports = async function (fastify) {
   );
 
   // POST /prune-subs — drop subtitle paths that no longer exist on disk.
-  fastify.post("/prune-subs", async (req) =>
-    manager.pruneSubtitlePaths((req.body || {}).downloadId),
-  );
+  // 403s if the target belongs to another (non-admin) user.
+  fastify.post("/prune-subs", async (req, reply) => {
+    const result = manager.pruneSubtitlePaths(
+      (req.body || {}).downloadId,
+      req.user,
+    );
+    if (!result.ok && result.code === "FORBIDDEN") reply.code(403);
+    return result;
+  });
 };
