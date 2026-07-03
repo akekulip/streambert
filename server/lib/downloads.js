@@ -21,6 +21,25 @@ const { safeFetch } = require("./safeUrl");
 
 const VIDEO_EXTS = [".mp4", ".mkv", ".webm", ".avi", ".mov", ".m4v", ".ts"];
 
+// ── Per-user scoping (I1) ────────────────────────────────────────────────────
+// Every download record gets a `userId` (the id of the account that started
+// it) set once at creation time in runDownload(). Records persisted before
+// this field existed have no `userId` at all — those legacy rows are treated
+// as belonging to nobody: a regular user's strict `===` check never matches
+// `undefined`, so they're invisible to every non-admin account and visible
+// only to admins (who can see/manage everything).
+function ownsDownload(dl, user) {
+  if (!dl || !user) return false;
+  if (user.role === "admin") return true;
+  return dl.userId != null && dl.userId === user.id;
+}
+
+// Global cap on concurrent downloader (`vid-dl`) child processes — an
+// unauthenticated-DoS guard (I1): without it, any active account could spawn
+// unbounded downloader processes. Checked against the live activeProcs count
+// in runDownload(), so it self-corrects as processes exit/error out.
+const MAX_CONCURRENT_DOWNLOADS = 2;
+
 // True when `child` resolves to `parent` or a path underneath it.
 function isPathInside(child, parent) {
   const rel = path.relative(path.resolve(parent), path.resolve(child));
@@ -231,7 +250,9 @@ function createDownloadManager({ dataDir, downloaderPath, broadcast }) {
   }
 
   // ── Start a download ──────────────────────────────────────────────────────
-  function runDownload(opts) {
+  // `user` is the caller's session user ({id, role, ...}) — never trust a
+  // client-supplied userId in the body; it's threaded in separately here.
+  function runDownload(opts, user) {
     const {
       m3u8Url,
       name,
@@ -254,6 +275,14 @@ function createDownloadManager({ dataDir, downloaderPath, broadcast }) {
     }
     if (!m3u8Url) return { ok: false, error: "Missing m3u8Url" };
 
+    if (activeProcs.size >= MAX_CONCURRENT_DOWNLOADS) {
+      return {
+        ok: false,
+        error: "too many downloads in progress",
+        code: "TOO_MANY",
+      };
+    }
+
     // Server owns the output directory — never trust a client-supplied path.
     const downloadPath = downloadsDir;
 
@@ -264,6 +293,7 @@ function createDownloadManager({ dataDir, downloaderPath, broadcast }) {
 
       const entry = {
         id,
+        userId: user ? user.id : null,
         name,
         m3u8Url,
         downloadPath,
@@ -701,11 +731,20 @@ function createDownloadManager({ dataDir, downloaderPath, broadcast }) {
   }
 
   // ── Registry queries / mutations ─────────────────────────────────────────
-  const getDownloads = () => downloads;
+  // Scoped to the caller (I1): a regular user only ever sees their own
+  // records; admins see everything (including legacy rows with no userId).
+  const getDownloads = (user) => {
+    if (user && user.role === "admin") return downloads;
+    const uid = user && user.id;
+    return downloads.filter((d) => d.userId === uid);
+  };
 
-  function deleteDownload({ id, filePath } = {}) {
+  function deleteDownload({ id, filePath } = {}, user) {
     try {
       const dlEntry = downloads.find((d) => d.id === id);
+      if (dlEntry && !ownsDownload(dlEntry, user)) {
+        return { ok: false, error: "forbidden", code: "FORBIDDEN" };
+      }
       if (activeProcs.has(id)) {
         try {
           activeProcs.get(id).kill("SIGKILL");
@@ -739,11 +778,18 @@ function createDownloadManager({ dataDir, downloaderPath, broadcast }) {
     }
   }
 
-  function deleteAllDownloads() {
+  // Non-admins only wipe their own records; other users' downloads (and their
+  // files) are left untouched and stay in the registry.
+  function deleteAllDownloads(user) {
     try {
       let deleted = 0;
       let errors = 0;
+      const keep = [];
       for (const dl of downloads) {
+        if (!ownsDownload(dl, user)) {
+          keep.push(dl);
+          continue;
+        }
         if (dl.filePath && isPathInside(dl.filePath, downloadsDir)) {
           try {
             if (fs.existsSync(dl.filePath)) {
@@ -765,7 +811,7 @@ function createDownloadManager({ dataDir, downloaderPath, broadcast }) {
           } catch {}
         }
       }
-      downloads = [];
+      downloads = keep;
       saveDownloads();
       return { ok: true, deleted, errors };
     } catch (e) {
@@ -787,9 +833,15 @@ function createDownloadManager({ dataDir, downloaderPath, broadcast }) {
     return { bytes };
   }
 
-  function fileExists(filePath) {
+  // Hides the file when it's a tracked download owned by someone else; an
+  // untracked path (no matching registry record) falls through unchanged —
+  // the shared downloads dir isn't partitioned per user, so ownership can
+  // only be attributed via the registry.
+  function fileExists(filePath, user) {
     try {
       if (!filePath || !isPathInside(filePath, downloadsDir)) return false;
+      const dlEntry = downloads.find((d) => d.filePath === filePath);
+      if (dlEntry && !ownsDownload(dlEntry, user)) return false;
       return fs.existsSync(filePath);
     } catch {
       return false;
@@ -798,7 +850,9 @@ function createDownloadManager({ dataDir, downloaderPath, broadcast }) {
 
   // Scan for playable video files on the server. `folderPath` is honoured only
   // when it stays inside the downloads dir; otherwise the downloads dir is used.
-  function scanDirectory(folderPath) {
+  // Results are filtered the same way as fileExists(): a file tracked in the
+  // registry under another user's download is dropped from the listing.
+  function scanDirectory(folderPath, user) {
     try {
       ensureDownloadsDir();
       let root = downloadsDir;
@@ -842,15 +896,21 @@ function createDownloadManager({ dataDir, downloaderPath, broadcast }) {
         }
       };
       scanDir(root);
-      return results;
+      if (user && user.role === "admin") return results;
+      return results.filter((r) => {
+        const dl = downloads.find((d) => d.filePath === r.filePath);
+        return !dl || ownsDownload(dl, user);
+      });
     } catch {
       return [];
     }
   }
 
   // ── Video duration via ffprobe (ported from src/ipc/player.js) ────────────
-  function getVideoDuration(filePath) {
+  function getVideoDuration(filePath, user) {
     if (!filePath || !isPathInside(filePath, downloadsDir)) return { ok: false };
+    const dlEntry = downloads.find((d) => d.filePath === filePath);
+    if (dlEntry && !ownsDownload(dlEntry, user)) return { ok: false };
     if (!fs.existsSync(filePath)) return { ok: false };
 
     const probePaths = [
@@ -945,6 +1005,9 @@ function createDownloadManager({ dataDir, downloaderPath, broadcast }) {
     loadDownloads,
     saveDownloads,
     killAll,
+    // Testing/observability seam for the concurrency cap — the number of
+    // currently in-flight downloader processes for this manager instance.
+    getActiveDownloadCount: () => activeProcs.size,
   };
 }
 
@@ -955,4 +1018,6 @@ module.exports = {
   readCapped,
   MAX_SUB_BYTES,
   MAX_SUBTITLES,
+  MAX_CONCURRENT_DOWNLOADS,
+  ownsDownload,
 };

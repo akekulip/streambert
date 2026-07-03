@@ -36,36 +36,48 @@ module.exports = async function (fastify) {
   // POST /check — downloader availability (env-driven; `folder` ignored).
   fastify.post("/check", async () => manager.checkDownloader());
 
-  // POST / — start a download.
-  fastify.post("/", async (req) => manager.runDownload(req.body || {}));
+  // POST / — start a download. Scoped to the caller (I1: entry.userId), and
+  // 429s once MAX_CONCURRENT_DOWNLOADS spawns are already in flight.
+  fastify.post("/", async (req, reply) => {
+    const result = manager.runDownload(req.body || {}, req.user);
+    if (!result.ok && result.code === "TOO_MANY") reply.code(429);
+    return result;
+  });
 
-  // GET / — full registry.
-  fastify.get("/", async () => manager.getDownloads());
+  // GET / — registry, scoped to the caller (admins see everyone's).
+  fastify.get("/", async (req) => manager.getDownloads(req.user));
 
   // POST /delete — remove one download (file + subtitles + registry entry).
-  fastify.post("/delete", async (req) =>
-    manager.deleteDownload(req.body || {}),
-  );
+  // 403s if the target belongs to another (non-admin) user.
+  fastify.post("/delete", async (req, reply) => {
+    const result = manager.deleteDownload(req.body || {}, req.user);
+    if (!result.ok && result.code === "FORBIDDEN") reply.code(403);
+    return result;
+  });
 
-  // POST /scan — list playable video files on the server.
+  // POST /scan — list playable video files on the server, scoped to the caller.
   fastify.post("/scan", async (req) =>
-    manager.scanDirectory((req.body || {}).path),
+    manager.scanDirectory((req.body || {}).path, req.user),
   );
 
-  // POST /file-exists — existence check, constrained to the downloads dir.
+  // POST /file-exists — existence check, constrained to the downloads dir and
+  // to the caller's own tracked downloads.
   fastify.post("/file-exists", async (req) =>
-    manager.fileExists((req.body || {}).path),
+    manager.fileExists((req.body || {}).path, req.user),
   );
 
   // GET /size — total bytes of tracked files.
   fastify.get("/size", async () => manager.getDownloadsSize());
 
-  // POST /delete-all — wipe every download + its files.
-  fastify.post("/delete-all", async () => manager.deleteAllDownloads());
+  // POST /delete-all — wipe the caller's own downloads + their files (admins
+  // wipe everyone's).
+  fastify.post("/delete-all", async (req) =>
+    manager.deleteAllDownloads(req.user),
+  );
 
-  // POST /duration — ffprobe the file duration in seconds.
+  // POST /duration — ffprobe the file duration in seconds, scoped to the caller.
   fastify.post("/duration", async (req) =>
-    manager.getVideoDuration((req.body || {}).filePath),
+    manager.getVideoDuration((req.body || {}).filePath, req.user),
   );
 
   // POST /prune-subs — drop subtitle paths that no longer exist on disk.
