@@ -15,10 +15,9 @@
 const { spawn, spawnSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
-const https = require("https");
-const http = require("http");
 const os = require("os");
 const crypto = require("crypto");
+const { safeFetch } = require("./safeUrl");
 
 const VIDEO_EXTS = [".mp4", ".mkv", ".webm", ".avi", ".mov", ".m4v", ".ts"];
 
@@ -41,71 +40,17 @@ function humanBytes(bytes) {
 }
 
 // ── Subtitle file downloader (used during run-download completion) ─────────────
-function downloadSubtitleFile(url, destPath) {
-  return new Promise((resolve) => {
-    try {
-      const parsedUrl = new URL(url);
-      if (parsedUrl.protocol === "file:") {
-        try {
-          fs.copyFileSync(decodeURIComponent(parsedUrl.pathname), destPath);
-          resolve(true);
-        } catch {
-          resolve(false);
-        }
-        return;
-      }
-      const lib = parsedUrl.protocol === "https:" ? https : http;
-      const req = lib.get(
-        url,
-        {
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
-            Referer: parsedUrl.origin,
-            Accept: "*/*",
-          },
-        },
-        (res) => {
-          if (
-            res.statusCode >= 300 &&
-            res.statusCode < 400 &&
-            res.headers.location
-          ) {
-            const loc = res.headers.location.startsWith("http")
-              ? res.headers.location
-              : parsedUrl.origin + res.headers.location;
-            downloadSubtitleFile(loc, destPath).then(resolve);
-            return;
-          }
-          if (res.statusCode !== 200) {
-            res.resume();
-            resolve(false);
-            return;
-          }
-          const file = fs.createWriteStream(destPath);
-          res.pipe(file);
-          file.on("finish", () => {
-            file.close();
-            resolve(true);
-          });
-          file.on("error", () => {
-            try {
-              fs.unlinkSync(destPath);
-            } catch {}
-            resolve(false);
-          });
-          res.on("error", () => resolve(false));
-        },
-      );
-      req.on("error", () => resolve(false));
-      req.setTimeout(20000, () => {
-        req.destroy();
-        resolve(false);
-      });
-    } catch {
-      resolve(false);
-    }
-  });
+// http(s) only — no `file:` branch (that was an arbitrary local-file read).
+// Goes through safeFetch, which rejects private/loopback/link-local targets
+// and re-validates every redirect hop (SSRF guard). Rejects on any blocked or
+// non-http(s) URL; resolves false on a non-2xx response; resolves true once
+// the body is written to destPath.
+async function downloadSubtitleFile(url, destPath) {
+  const res = await safeFetch(url, {}, 20000);
+  if (!res.ok) return false;
+  const buf = Buffer.from(await res.arrayBuffer());
+  fs.writeFileSync(destPath, buf);
+  return true;
 }
 
 // ── Manager factory ────────────────────────────────────────────────────────────
@@ -660,15 +605,21 @@ function createDownloadManager({ dataDir, downloaderPath, broadcast }) {
               langCounter[safeLang] = lIdx + 1;
               const suffix = lIdx > 0 ? `.${lIdx}` : "";
               const subDestPath = `${videoBase}.${safeLang}${suffix}${subExt}`;
-              return downloadSubtitleFile(url, subDestPath).then((ok) =>
-                ok
-                  ? {
-                      lang: lang || "unknown",
-                      path: subDestPath,
-                      file_id: file_id || null,
-                    }
-                  : null,
-              );
+              return downloadSubtitleFile(url, subDestPath)
+                .then((ok) =>
+                  ok
+                    ? {
+                        lang: lang || "unknown",
+                        path: subDestPath,
+                        file_id: file_id || null,
+                      }
+                    : null,
+                )
+                // safeFetch rejects (blocked/invalid URL, timeout, network
+                // error) rather than resolving false — treat that the same
+                // as a failed subtitle fetch instead of failing the whole
+                // batch (Promise.all below) for one bad subtitle entry.
+                .catch(() => null);
             },
           );
           Promise.all(subPromises).then((results) => {
@@ -951,4 +902,8 @@ function createDownloadManager({ dataDir, downloaderPath, broadcast }) {
   };
 }
 
-module.exports = { createDownloadManager, isPathInside };
+module.exports = {
+  createDownloadManager,
+  isPathInside,
+  downloadSubtitleFile,
+};
