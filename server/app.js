@@ -89,6 +89,20 @@ async function buildApp({ db, cookieSecret, loginThrottle, dataDir, distDir, tmd
     }
   });
 
+  // Baseline security headers on every response (defense-in-depth ahead of
+  // public exposure). frame-ancestors/X-Frame-Options are skipped for /vzy —
+  // those routes are the Videasy same-origin proxy and are meant to be framed
+  // by the app's own player, so blocking framing there would break embedding.
+  fastify.addHook("onSend", async (req, reply, payload) => {
+    reply.header("X-Content-Type-Options", "nosniff");
+    reply.header("Referrer-Policy", "no-referrer");
+    if (!req.url.startsWith("/vzy")) {
+      reply.header("X-Frame-Options", "DENY");
+      reply.header("Content-Security-Policy", "frame-ancestors 'none'");
+    }
+    return payload;
+  });
+
   require("./events")(fastify);
   await fastify.register(require("./routes/auth"));
   await fastify.register(require("./routes/admin"));
