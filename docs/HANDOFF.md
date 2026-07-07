@@ -86,7 +86,7 @@ ssh decps@10.10.54.19 'docker ps --filter name=streambert --format "{{.Names}} {
   docker exec streambert-extractor node -e "fetch(\"http://localhost:8788/health\").then(r=>r.text()).then(console.log)"'
 ```
 
-Local builds/tests use nvm node 20 (`export PATH=~/.nvm/versions/node/v20.20.2/bin:$PATH`) — the sandbox default `node` is a stale v10 that breaks `node:test`. Server tests: `node --test server/test/`. Frontend: `npm run build`.
+Local builds/tests use nvm node 20 (`export PATH=~/.nvm/versions/node/v20.20.2/bin:$PATH`) — the sandbox default `node` is a stale v10 that breaks `node:test`. Server tests: `cd server && npm test` (bare `node --test` — newer Node rejects directory args like `node --test test/`). Frontend: `npm run build`.
 
 ---
 
