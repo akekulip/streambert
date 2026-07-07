@@ -276,8 +276,13 @@ export const sourceIsAsync = (sourceId) =>
 
 // Return the next non-async source after `currentId` in PLAYER_SOURCES order.
 // Used to auto-fail over to another provider (e.g. when AllManga lacks an episode).
+// Skips Videasy on web when the /vzy proxy is off — same rule as
+// getSelectableSources — since its anti-embed guard blanks the player there.
 export const getNextNonAsyncSource = (currentId) => {
-  const nonAsync = PLAYER_SOURCES.filter((s) => !s.async);
+  const isWeb = typeof window !== "undefined" && !!window.__STREAMBERT_WEB__;
+  const nonAsync = PLAYER_SOURCES.filter(
+    (s) => !s.async && (s.id !== "videasy" || !isWeb || _vzyEnabled),
+  );
   if (nonAsync.length === 0) return null;
   const idx = nonAsync.findIndex((s) => s.id === currentId);
   if (idx < 0) return nonAsync[0].id;

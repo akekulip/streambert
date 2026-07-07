@@ -37,15 +37,14 @@ const PLAYER_STYLE = {
   background: "black",
 };
 
-// <iframe> for movie/TV embed sources. Sandboxed to block top-nav hijack and
-// popunders: no allow-top-navigation(-by-user-activation) and no allow-popups,
-// so a malicious ad inside the embed can't `top.location =` the tab to a
-// phishing page or spawn popunder windows. allow-same-origin is scoped to the
-// iframe's own (cross-origin) origin, not ours, so it doesn't grant the embed
-// access to this app. Trade-off: some providers detect the sandbox *attribute*
-// itself and refuse to play ("Iframe Sandbox Detected") even with
-// scripts/forms allowed — if a specific provider breaks, test per-provider in
-// the manual pass and relax only the minimal token that provider needs.
+// <iframe> for movie/TV embed sources. Sandboxed to block top-nav hijack: no
+// allow-top-navigation(-by-user-activation), so a malicious ad inside the
+// embed can't `top.location =` the tab to a phishing page. allow-same-origin
+// is scoped to the iframe's own (cross-origin) origin, not ours, so it doesn't
+// grant the embed access to this app. allow-popups is required in practice:
+// providers probe window.open() and refuse to play ("Iframe Sandbox Detected")
+// when it's blocked. Popups inherit the sandbox (no
+// allow-popups-to-escape-sandbox), which keeps spawned ad windows neutered.
 export function WebEmbedPlayer({ src, hidden, onReady }) {
   return (
     <iframe
@@ -54,7 +53,7 @@ export function WebEmbedPlayer({ src, hidden, onReady }) {
       onLoad={onReady}
       allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
       allowFullScreen
-      sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"
+      sandbox="allow-scripts allow-same-origin allow-presentation allow-forms allow-popups"
       style={{ ...PLAYER_STYLE, visibility: hidden ? "hidden" : "visible" }}
     />
   );
