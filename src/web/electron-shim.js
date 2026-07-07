@@ -21,6 +21,10 @@ const get = (path) => api(path).then(json);
 const listeners = new Map(); // channel -> Set<fn>
 let ws = null;
 let wsTimer = null;
+
+// Latched true when /api/secure 404s (static hosting, no backend): the secure
+// key store then lives in localStorage for the rest of the session.
+let _secureLocal = false;
 function ensureWs() {
   if (ws && (ws.readyState === 0 || ws.readyState === 1)) return;
   const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -118,12 +122,43 @@ export function installWebShim() {
       window.open("https://sub.wyzie.ru", "_blank", "noopener"),
 
     // ── Secure key store → /api/secure (server, behind auth) ────────────────
-    secureGet: (key) => get(`/secure/${encodeURIComponent(key)}`).then((r) => r.value ?? null),
-    secureSet: (key, value) =>
-      api(`/secure/${encodeURIComponent(key)}`, {
-        method: "PUT",
-        body: JSON.stringify({ value }),
-      }).then(json),
+    // Static hosting (no backend): /api/secure 404s — latch to localStorage so
+    // a user-entered key survives reloads. Only a 404 latches; 401 (logged
+    // out) and transient errors keep server semantics, mirroring tmdbFetch.
+    secureGet: async (key) => {
+      if (!_secureLocal) {
+        try {
+          const r = await api(`/secure/${encodeURIComponent(key)}`);
+          if (r.status !== 404) return (await r.json()).value ?? null;
+          _secureLocal = true;
+        } catch {
+          // server unreachable — read local this once without latching
+        }
+      }
+      try {
+        return localStorage.getItem(`streambert_secure_${key}`);
+      } catch {
+        return null;
+      }
+    },
+    secureSet: async (key, value) => {
+      if (!_secureLocal) {
+        try {
+          const r = await api(`/secure/${encodeURIComponent(key)}`, {
+            method: "PUT",
+            body: JSON.stringify({ value }),
+          });
+          if (r.status !== 404) return await r.json();
+          _secureLocal = true;
+        } catch {
+          // server unreachable — write local this once without latching
+        }
+      }
+      try {
+        localStorage.setItem(`streambert_secure_${key}`, value ?? "");
+      } catch {}
+      return { ok: true };
+    },
 
     // ── App/meta ────────────────────────────────────────────────────────────
     getAppVersion: () => get("/version").then((r) => r.version),
