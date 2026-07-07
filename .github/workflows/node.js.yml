@@ -1,13 +1,13 @@
-# This workflow will do a clean installation of node dependencies, cache/restore them, build the source code and run tests across different versions of node
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-nodejs
+# Frontend build + server test suite.
+# Node 18 removed from the matrix: this repo's Vite requires Node 20.19+ / 22.12+.
 
 name: Node.js CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "web-port" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "web-port" ]
 
 jobs:
   build:
@@ -16,8 +16,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [18.x, 20.x, 22.x]
-        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
+        node-version: [20.x, 22.x]
 
     steps:
     - uses: actions/checkout@v4
@@ -26,6 +25,10 @@ jobs:
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
+        cache-dependency-path: |
+          package-lock.json
+          server/package-lock.json
     - run: npm ci
-    - run: npm run build --if-present
-    - run: npm test
+    - run: npm run build
+    - run: npm ci --prefix server
+    - run: npm test --prefix server
