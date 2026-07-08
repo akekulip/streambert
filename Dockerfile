@@ -50,6 +50,10 @@ ENV NODE_ENV=production \
     PUPPETEER_SKIP_DOWNLOAD=1 \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    # Default the extractor to the in-container co-process (docker-start.sh runs
+    # it on :8788). Multi-service deploys override this with an external URL,
+    # which also stops docker-start.sh from launching the redundant co-process.
+    STREAMBERT_EXTRACTOR_URL=http://127.0.0.1:8788 \
     # Path to the downloader CLI (vid-dl). NOT bundled in this image — mount or
     # install it (see docs/DEPLOY.md). The server tolerates its absence until an
     # actual download is requested, so the build never fails without it.
@@ -63,6 +67,16 @@ COPY --from=builder /app/dist ./dist
 COPY server ./server
 RUN cd server && npm install --omit=dev && npm cache clean --force
 
+# Stream extractor (puppeteer-core; drives the system Chromium installed above)
+# + its production deps, run as a co-process by docker-start.sh on single-
+# service deploys. puppeteer-core downloads no browser (PUPPETEER_SKIP_DOWNLOAD).
+COPY extractor ./extractor
+RUN cd extractor && npm install --omit=dev && npm cache clean --force
+
+# Container entrypoint (starts the extractor co-process + the app).
+COPY docker-start.sh ./docker-start.sh
+RUN chmod +x ./docker-start.sh
+
 # Data dir (downloads + secure key store); bind-mounted via docker-compose.
 RUN mkdir -p /data && chown -R node:node /data /app
 
@@ -74,4 +88,4 @@ EXPOSE 8787
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD node -e "require('http').get('http://127.0.0.1:'+(process.env.PORT||8787)+'/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
 
-CMD ["node", "server/index.js"]
+CMD ["./docker-start.sh"]

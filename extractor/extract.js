@@ -51,9 +51,37 @@ async function getBrowser() {
   browserP = puppeteer.launch({
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/chromium",
     headless: "new",
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--autoplay-policy=no-user-gesture-required"],
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--autoplay-policy=no-user-gesture-required",
+      // Low-memory flags so Chromium fits alongside the app on a small
+      // single-service host (e.g. a 512MB cloud instance). --single-process
+      // is the big saver; a crash under it just throws → the app falls back
+      // to an embed source, so the failure mode is graceful, not fatal.
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--single-process",
+      "--no-zygote",
+      "--disable-extensions",
+      "--disable-background-networking",
+      "--disable-default-apps",
+      "--mute-audio",
+      "--no-first-run",
+      "--js-flags=--max-old-space-size=256",
+    ],
   });
   return browserP;
+}
+
+// Free Chromium when nothing is extracting so idle memory drops back to just
+// the Node processes — important on a memory-constrained shared host. The next
+// extraction relaunches (a ~1-2s cost paid only after an idle period).
+async function closeIdleBrowser() {
+  if (active > 0 || queue.length > 0 || !browserP) return;
+  const p = browserP;
+  browserP = null;
+  try { const b = await p; await b.close(); } catch { /* already gone */ }
 }
 
 let active = 0;
@@ -62,7 +90,12 @@ async function withSlot(fn) {
   if (active >= MAX_CONCURRENCY) await new Promise((r) => queue.push(r));
   active++;
   try { return await fn(); }
-  finally { active--; const next = queue.shift(); if (next) next(); }
+  finally {
+    active--;
+    const next = queue.shift();
+    if (next) next();
+    else if (active === 0) closeIdleBrowser().catch(() => {});
+  }
 }
 
 function withTimeout(ms, promise, onTimeout) {
