@@ -11,3 +11,7 @@ data/
 
 # Browser network captures (may contain session data)
 *.har
+
+# Local session scratch / working notes (never publish)
+WORKING_NOTES.md
+.claude/
