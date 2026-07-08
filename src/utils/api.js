@@ -123,6 +123,16 @@ export const setVzyEnabled = (v) => {
   _vzyEnabled = !!v;
 };
 
+// Whether the server has a stream-extractor sidecar (set from /api/config's
+// `extractor` field). Assumed true until told otherwise so deployments that
+// have one (Vision/compose) keep VidSrc Direct as the ad-free default; a
+// single-service deploy (no extractor) reports false and the client defaults
+// to a plain embed instead of failing over from VidSrc Direct.
+let _extractorEnabled = true;
+export const setExtractorEnabled = (v) => {
+  _extractorEnabled = !!v;
+};
+
 // ── Player Sources ────────────────────────────────────────────────────────────
 // supportsProgress: true = executeJavaScript tracking works for this source
 export const PLAYER_SOURCES = [
@@ -204,7 +214,9 @@ export const getSelectableSources = () =>
   PLAYER_SOURCES.filter(
     (s) =>
       s.id !== "vidsrc-direct" ||
-      (typeof window !== "undefined" && window.__STREAMBERT_WEB__),
+      (typeof window !== "undefined" &&
+        window.__STREAMBERT_WEB__ &&
+        _extractorEnabled),
   ).filter(
     // Videasy is only offered on web when the server's /vzy proxy is enabled —
     // without it, Videasy's anti-embed guard blanks the player in our iframe.
@@ -509,9 +521,13 @@ export const ANIME_DEFAULT_SOURCE = "allmanga";
 export const NON_ANIME_DEFAULT_SOURCE = "videasy";
 
 // Reads the runtime web flag; call at render time (not module load) so the
-// web shim has already set window.__STREAMBERT_WEB__.
-export const getDefaultNonAnimeSource = () =>
-  defaultNonAnimeSource(typeof window !== "undefined" && !!window.__STREAMBERT_WEB__);
+// web shim has already set window.__STREAMBERT_WEB__. On web without an
+// extractor sidecar, VidSrc Direct can't resolve, so default to a plain embed.
+export const getDefaultNonAnimeSource = () => {
+  const isWeb = typeof window !== "undefined" && !!window.__STREAMBERT_WEB__;
+  if (isWeb && !_extractorEnabled) return "vidsrc";
+  return defaultNonAnimeSource(isWeb);
+};
 
 // ── Episode Group fetch (localStorage + in-memory cache, 7-day TTL) ─────────
 // Episode groups almost never change, so we cache aggressively across sessions.

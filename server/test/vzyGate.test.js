@@ -105,3 +105,23 @@ test("GET /api/config reports vzy:false when unset, vzy:true when STREAMBERT_VZY
       await app.close();
     }),
   ));
+
+test("GET /api/config reports extractor per STREAMBERT_EXTRACTOR_URL", async () => {
+  const prev = process.env.STREAMBERT_EXTRACTOR_URL;
+  try {
+    delete process.env.STREAMBERT_EXTRACTOR_URL;
+    let app = await makeApp();
+    let r = await app.inject({ method: "GET", url: "/api/config" });
+    assert.equal(r.json().extractor, false);
+    await app.close();
+
+    process.env.STREAMBERT_EXTRACTOR_URL = "http://streambert-extractor:8788";
+    app = await makeApp();
+    r = await app.inject({ method: "GET", url: "/api/config" });
+    assert.equal(r.json().extractor, true);
+    await app.close();
+  } finally {
+    if (prev === undefined) delete process.env.STREAMBERT_EXTRACTOR_URL;
+    else process.env.STREAMBERT_EXTRACTOR_URL = prev;
+  }
+});

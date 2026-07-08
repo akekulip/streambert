@@ -15,7 +15,7 @@ import PendingScreen from "./components/PendingScreen";
 import { storage, secureStorage, STORAGE_KEYS } from "./utils/storage";
 import { applyAccentColor } from "./utils/appearance";
 import { collectBackupData } from "./utils/backup";
-import { tmdbFetch, setApiErrorHandlers, setVzyEnabled } from "./utils/api";
+import { tmdbFetch, setApiErrorHandlers, setVzyEnabled, setExtractorEnabled } from "./utils/api";
 import { clearAppCaches } from "./utils/storage";
 import { getMe, logout } from "./utils/session";
 import * as userState from "./utils/userState";
@@ -361,7 +361,13 @@ export default function App() {
     let cancelled = false;
     fetch("/api/config", { credentials: "include" })
       .then((r) => r.json())
-      .then((cfg) => { if (!cancelled) setVzyEnabled(cfg.vzy); })
+      .then((cfg) => {
+        if (cancelled) return;
+        setVzyEnabled(cfg.vzy);
+        // Only override the default when the server actually reports the field
+        // (older servers omit it — keep the optimistic default there).
+        if (typeof cfg.extractor === "boolean") setExtractorEnabled(cfg.extractor);
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);

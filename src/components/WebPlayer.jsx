@@ -37,14 +37,17 @@ const PLAYER_STYLE = {
   background: "black",
 };
 
-// <iframe> for movie/TV embed sources. Sandboxed to block top-nav hijack: no
-// allow-top-navigation(-by-user-activation), so a malicious ad inside the
-// embed can't `top.location =` the tab to a phishing page. allow-same-origin
-// is scoped to the iframe's own (cross-origin) origin, not ours, so it doesn't
-// grant the embed access to this app. allow-popups is required in practice:
-// providers probe window.open() and refuse to play ("Iframe Sandbox Detected")
-// when it's blocked. Popups inherit the sandbox (no
-// allow-popups-to-escape-sandbox), which keeps spawned ad windows neutered.
+// <iframe> for movie/TV embed sources. Intentionally NOT sandboxed: the stream
+// providers (vidsrc/vidking/videasy) actively detect the `sandbox` attribute
+// and refuse to play ("Iframe Sandbox Detected") — no combination of allow-*
+// tokens satisfies them, so any sandbox attribute breaks playback entirely.
+// The tradeoff is real: without the sandbox the embed can top-navigate the tab
+// or spawn popups (the providers' ads). The desktop build avoids this by using
+// a <webview> with webRequest ad-blocking; a plain browser iframe has no such
+// hook. The clean alternative is the server-side extractor (VidSrc Direct),
+// which plays via WebMediaPlayer with no iframe at all — preferred when the
+// extractor sidecar is deployed. Cross-origin policy still prevents the embed
+// from reading this app's DOM/storage regardless.
 export function WebEmbedPlayer({ src, hidden, onReady }) {
   return (
     <iframe
@@ -53,7 +56,7 @@ export function WebEmbedPlayer({ src, hidden, onReady }) {
       onLoad={onReady}
       allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
       allowFullScreen
-      sandbox="allow-scripts allow-same-origin allow-presentation allow-forms allow-popups"
+      referrerPolicy="no-referrer"
       style={{ ...PLAYER_STYLE, visibility: hidden ? "hidden" : "visible" }}
     />
   );

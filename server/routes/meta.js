@@ -27,5 +27,10 @@ module.exports = async function (fastify) {
     // (see app.js — off by default, C5). Lets the client avoid offering/using
     // the Videasy-via-proxy path when the server won't actually serve it.
     vzy: process.env.STREAMBERT_VZY === "1",
+    // Whether a stream-extractor sidecar is wired up (STREAMBERT_EXTRACTOR_URL
+    // set explicitly, as in the Vision/compose deploys). When absent (e.g. a
+    // single-service cloud deploy) the client defaults to a plain embed source
+    // instead of VidSrc Direct, which would just fail over.
+    extractor: !!process.env.STREAMBERT_EXTRACTOR_URL,
   }));
 };
